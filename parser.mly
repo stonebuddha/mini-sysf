@@ -137,7 +137,7 @@ ty:
   ;
 
 term:
-  | e = app_term { e }
+  | e = bool_term { e }
   | LAMBDA; x = LCID; COLON; t = ty; DOT; e = term
     { fun ctx -> let ctx' = add_name ctx x in TmAbs (x, t ctx, e ctx') }
   | LET; x = LCID; EQ; e1 = term; IN; e2 = term
@@ -153,10 +153,10 @@ term:
 case: LT; tag = LCID; EQ; x = LCID; GT; DARROW; e = app_term { fun ctx -> let ctx' = add_name ctx x in (tag, (x, e ctx')) };
 
 app_term:
-  | e = bool_term { e }
-  | e1 = app_term; e2 = bool_term
+  | e = path_term { e }
+  | e1 = app_term; e2 = path_term
     { fun ctx -> TmApp (e1 ctx, e2 ctx) }
-  | FIX; e = bool_term
+  | FIX; e = path_term
     { fun ctx -> TmFix (e ctx) }
   | FOLD; LSQUARE; t = ty; RSQUARE
     { fun ctx -> TmFold (t ctx) }
@@ -173,9 +173,9 @@ bool_term:
   ;
 
 arith_term:
-  | e1 = arith_term; bop = arith_bin_op; e2 = path_term
+  | e1 = arith_term; bop = arith_bin_op; e2 = app_term
     { fun ctx -> TmPrimBinOp (bop, e1 ctx, e2 ctx) }
-  | e = path_term { e }
+  | e = app_term { e }
   ;
 
 arith_bin_op:

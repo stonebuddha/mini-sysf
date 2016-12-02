@@ -39,3 +39,6 @@ hd_err = lambda T. lambda t: List T.
 Nat = Int;
 zero = 0 as Nat;
 abs = (lambda n: Int. if n <? 0 then (0 - n) else n) as n:Int -> Nat;
+fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. (if n == 0 then 1 else n * f (n - 1)) as Nat;
+fac = fix fac_gen;
+fac 10;
