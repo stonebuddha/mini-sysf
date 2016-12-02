@@ -20,3 +20,7 @@ hd = lambda T. lambda t:List T. lambda d:T.
        case unfold [List T] t of
          <nil=_> => d
        | <cons=x> => x.1;
+tl = lambda T. lambda t:List T.
+       case unfold [List T] t of
+         <nil=_> => nil [T]
+       | <cons=x> => x.2;
