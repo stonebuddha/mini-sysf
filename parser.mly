@@ -6,7 +6,6 @@ open Syntax
 %token TBOOL
 %token TINT
 %token TFLOAT
-%token TSTRING
 %token ALL
 %token AS
 %token LAMBDA
@@ -30,7 +29,6 @@ open Syntax
 %token <string> LCID
 %token <int> INTV
 %token <float> FLOATV
-%token <string> STRINGV
 
 %token SEMI
 %token EQ
@@ -52,6 +50,13 @@ open Syntax
 %token EQEQ
 %token COLONCOLON
 %token STAR
+%token DIFF
+%token DIV
+%token LTGT
+%token LEQ
+%token LTQ
+%token GEQ
+%token GTQ
 
 %start <Syntax.context -> (Syntax.command list * Syntax.context)> top_level
 
@@ -99,7 +104,6 @@ atom_ty:
   | TBOOL { fun ctx -> TyBase BTyBool }
   | TINT { fun ctx -> TyBase BTyInt }
   | TFLOAT { fun ctx -> TyBase BTyFloat }
-  | TSTRING { fun ctx -> TyBase BTyString }
   | LT; ts = separated_list(COMMA, field_ty); GT { fun ctx -> TyVariant (List.map (fun t -> t ctx) ts) }
   | LCURLY; ts = separated_list(COMMA, ty); RCURLY { fun ctx -> TyProd (List.map (fun t -> t ctx) ts) }
   ;
@@ -145,10 +149,10 @@ term:
 case: LT; tag = LCID; EQ; x = LCID; GT; DARROW; e = app_term { fun ctx -> let ctx' = add_name ctx x in (tag, (x, e ctx')) };
 
 app_term:
-  | e = path_term { e }
-  | e1 = app_term; e2 = path_term
+  | e = bool_term { e }
+  | e1 = app_term; e2 = bool_term
     { fun ctx -> TmApp (e1 ctx, e2 ctx) }
-  | FIX; e = path_term
+  | FIX; e = bool_term
     { fun ctx -> TmFix (e ctx) }
   | FOLD; LSQUARE; t = ty; RSQUARE
     { fun ctx -> TmFold (t ctx) }
@@ -156,13 +160,34 @@ app_term:
     { fun ctx -> TmUnfold (t ctx) }
   | e = app_term; LSQUARE; t = ty; RSQUARE
     { fun ctx -> TmTApp (e ctx, t ctx) }
-  | e1 = path_term; bop = prim_bin_op; e2 = path_term
-    { fun ctx -> TmPrimBinOp (bop, e1 ctx, e2 ctx) }
   ;
 
-prim_bin_op:
+bool_term:
+  | e1 = arith_term; bop = bool_bin_op; e2 = arith_term
+    { fun ctx -> TmPrimBinOp (bop, e1 ctx, e2 ctx) }
+  | e = arith_term { e }
+  ;
+
+arith_term:
+  | e1 = arith_term; bop = arith_bin_op; e2 = path_term
+    { fun ctx -> TmPrimBinOp (bop, e1 ctx, e2 ctx) }
+  | e = path_term { e }
+  ;
+
+arith_bin_op:
   | ADD { PBIntAdd }
+  | DIFF { PBIntDiff }
+  | STAR { PBIntMul }
+  | DIV { PBIntDiv }
+  ;
+
+bool_bin_op:
   | EQEQ { PBEq }
+  | LTGT { PBNe }
+  | LTQ { PBLt }
+  | LEQ { PBLe }
+  | GTQ { PBGt }
+  | GEQ { PBGe }
   ;
 
 path_term:
@@ -183,7 +208,6 @@ atom_term:
   | FALSE { fun ctx -> TmFalse }
   | i = INTV { fun ctx -> TmInt i }
   | f = FLOATV { fun ctx -> TmFloat f }
-  | s = STRINGV { fun ctx -> TmString s }
   | LCURLY; es = separated_list(COMMA, term); RCURLY { fun ctx -> TmTuple (List.map (fun e -> e ctx) es) }
   | LT; tag = LCID; EQ; e = term; GT; AS; t = ty { fun ctx -> TmTag (tag, e ctx, t ctx) }
   ;

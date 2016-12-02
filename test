@@ -1,10 +1,17 @@
-"hello";
 unit;
 lambda x:Int. x;
 lambda X. lambda x:X. x;
 let x = true in x;
 5 + 4;
+5 - 2;
+5 * 2;
+4 / 3;
 6 == 3;
+6 >? 2;
+2 <? 6;
+3.2 >=? 7.;
+7. <=? 3.2;
+unit <> unit;
 (lambda x:Bool->Bool. if x false then true else false) (lambda x:Bool. if x then false else true);
 T = Int -> Int;
 lambda f:T. lambda x:Int. f (f x);

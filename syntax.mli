@@ -9,7 +9,6 @@ type base_ty =
   | BTyBool
   | BTyInt
   | BTyFloat
-  | BTyString
 
 type ty =
   | TyVar of int * int
@@ -24,7 +23,15 @@ type ty =
 
 type prim_bin_op =
   | PBIntAdd
+  | PBIntDiff
+  | PBIntMul
+  | PBIntDiv
   | PBEq
+  | PBNe
+  | PBLt
+  | PBLe
+  | PBGt
+  | PBGe
 
 type term =
   | TmVar of int * int
@@ -33,7 +40,6 @@ type term =
   | TmFalse
   | TmInt of int
   | TmFloat of float
-  | TmString of string
   | TmAbs of string * ty * term
   | TmApp of term * term
   | TmTuple of term list

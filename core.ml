@@ -114,7 +114,6 @@ let rec type_of ctx tm =
   | TmFalse -> TyBase BTyBool
   | TmInt _ -> TyBase BTyInt
   | TmFloat _ -> TyBase BTyFloat
-  | TmString _ -> TyBase BTyString
   | TmAbs (x, tyT1, tm2) ->
     check_kind_type ctx tyT1;
     let ctx' = add_binding ctx x (VarBind tyT1) in
@@ -200,14 +199,29 @@ let rec type_of ctx tm =
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of ctx tm2 in
     (match bop with
-     | PBIntAdd -> if type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt) then (TyBase BTyInt) else failwith "failure with bop"
-     | PBEq ->
+     | PBIntAdd
+     | PBIntDiff
+     | PBIntMul
+     | PBIntDiv ->
+       if type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt) then (TyBase BTyInt) else failwith "failure with bop"
+     | PBEq
+     | PBNe ->
        if
          (type_eqv ctx tyT1 (TyBase BTyUnit) && type_eqv ctx tyT2 (TyBase BTyUnit)) ||
          (type_eqv ctx tyT1 (TyBase BTyBool) && type_eqv ctx tyT2 (TyBase BTyBool)) ||
          (type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt)) ||
-         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat)) ||
-         (type_eqv ctx tyT1 (TyBase BTyString) && type_eqv ctx tyT2 (TyBase BTyString))
+         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat))
+       then
+         TyBase BTyBool
+       else
+         failwith "failure with bop"
+     | PBLt
+     | PBLe
+     | PBGt
+     | PBGe ->
+       if
+         (type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt)) ||
+         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat))
        then
          TyBase BTyBool
        else

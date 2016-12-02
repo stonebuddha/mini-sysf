@@ -9,7 +9,6 @@ type base_ty =
   | BTyBool
   | BTyInt
   | BTyFloat
-  | BTyString
 
 type ty =
   | TyVar of int * int
@@ -24,7 +23,15 @@ type ty =
 
 type prim_bin_op =
   | PBIntAdd
+  | PBIntDiff
+  | PBIntMul
+  | PBIntDiv
   | PBEq
+  | PBNe
+  | PBLt
+  | PBLe
+  | PBGt
+  | PBGe
 
 type term =
   | TmVar of int * int
@@ -33,7 +40,6 @@ type term =
   | TmFalse
   | TmInt of int
   | TmFloat of float
-  | TmString of string
   | TmAbs of string * ty * term
   | TmApp of term * term
   | TmTuple of term list
@@ -109,7 +115,6 @@ let term_map on_var on_type c tm =
     | TmFalse -> TmFalse
     | TmInt i -> TmInt i
     | TmFloat f -> TmFloat f
-    | TmString s -> TmString s
     | TmAbs (x, tyT1, tm2) -> TmAbs (x, on_type c tyT1, walk (c + 1) tm2)
     | TmApp (tm1, tm2) -> TmApp (walk c tm1, walk c tm2)
     | TmTuple tms -> TmTuple (List.map (walk c) tms)
@@ -240,7 +245,6 @@ and string_of_type_atom_ty ctx tyT =
   | TyBase BTyBool -> "Bool"
   | TyBase BTyInt -> "Int"
   | TyBase BTyFloat -> "Float"
-  | TyBase BTyString -> "String"
   | TyVariant ftys -> "<" ^ String.join ", " (List.map (fun (tag, tyT) -> tag ^ ":" ^ string_of_type_ty ctx tyT) ftys)  ^ ">"
   | TyProd tyTs -> "{" ^ String.join ", " (List.map (string_of_type_ty ctx) tyTs) ^ "}"
   | _ -> "(" ^ string_of_type_ty ctx tyT ^ ")"
