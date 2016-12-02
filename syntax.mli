@@ -15,6 +15,7 @@ type ty =
 
 type prim_bin_op =
   | PBIntAdd
+  | PBEq
 
 type term =
   | TmVar of int * int
@@ -39,7 +40,7 @@ type term =
   | TmFix of term
   | TmIf of term * term * term
   | TmAscribe of term * ty
-  | TmPrimBinop of prim_bin_op * term * term
+  | TmPrimBinOp of prim_bin_op * term * term
 
 type binding =
   | NameBind
