@@ -49,6 +49,7 @@ type term =
 
 type binding =
   | NameBind
+  | VarBind of ty
   | TyVarBind of kind
   | TyAbbBind of ty * (kind option)
   | TmAbbBind of term * (ty option)
@@ -146,6 +147,7 @@ let type_shift d tyT = type_shift_above d 0 tyT
 let binding_shift d bind =
   match bind with
   | NameBind -> NameBind
+  | VarBind tyT -> VarBind (type_shift d tyT)
   | TyVarBind kd -> TyVarBind kd
   | TyAbbBind (tyT, opt) -> TyAbbBind (type_shift d tyT, opt)
   | TmAbbBind (tm, opt) -> TmAbbBind (term_shift d tm, Option.map (type_shift d) opt)
@@ -182,5 +184,66 @@ let get_binding ctx i =
 
 let get_type_from_context ctx i =
   match get_binding ctx i with
+  | VarBind tyT -> tyT
   | TmAbbBind (_, Some tyT) -> tyT
   | _ -> failwith "failure with get_type_from_context"
+
+let rec pick_fresh_name ctx x =
+  if is_name_bound ctx x then pick_fresh_name ctx (x ^ "'") else ((x, NameBind) :: ctx, x)
+
+let rec string_of_kind_kind ctx kd =
+  match kd with
+  | _ -> string_of_kind_arrow_kind ctx kd
+
+and string_of_kind_arrow_kind ctx kd =
+  match kd with
+  | KdArrow (kd1, kd2) -> string_of_kind_atom_kind ctx kd1 ^ " => " ^ string_of_kind_arrow_kind ctx kd2
+  | _ -> string_of_kind_atom_kind ctx kd
+
+and string_of_kind_atom_kind ctx kd =
+  match kd with
+  | KdType -> "*"
+  | _ -> "(" ^ string_of_kind_kind ctx kd ^ ")"
+
+let string_of_kind ctx kd = string_of_kind_kind ctx kd
+
+let string_of_option_kind ctx kd = if kd = KdType then "" else "::" ^ string_of_kind ctx kd
+
+let rec string_of_type_ty ctx tyT =
+  match tyT with
+  | TyAll (x, kd1, tyT2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "All " ^ x ^ string_of_option_kind ctx kd1 ^ ". " ^ string_of_type_ty ctx' tyT2
+  | TyRec (x, kd1, tyT2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "Rec " ^ x ^ string_of_option_kind ctx kd1 ^ ". " ^ string_of_type_ty ctx' tyT2
+  | TyAbs (x, kd1, tyT2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "lambda " ^ x ^ string_of_option_kind ctx kd1 ^ ". " ^ string_of_type_ty ctx' tyT2
+  | _ -> string_of_type_arrow_ty ctx tyT
+
+and string_of_type_arrow_ty ctx tyT =
+  match tyT with
+  | TyArrow (tyT1, tyT2) ->
+    string_of_type_app_ty ctx tyT1 ^ " -> " ^ string_of_type_arrow_ty ctx tyT2
+  | _ -> string_of_type_app_ty ctx tyT
+
+and string_of_type_app_ty ctx tyT =
+  match tyT with
+  | TyApp (tyT1, tyT2) ->
+    string_of_type_app_ty ctx tyT1 ^ " " ^ string_of_type_atom_ty ctx tyT2
+  | _ -> string_of_type_atom_ty ctx tyT
+
+and string_of_type_atom_ty ctx tyT =
+  match tyT with
+  | TyVar (i, _) -> index_to_name ctx i
+  | TyUnit -> "Unit"
+  | TyBool -> "Bool"
+  | TyInt -> "Int"
+  | TyFloat -> "Float"
+  | TyString -> "String"
+  | TyVariant ftys -> "<" ^ String.join ", " (List.map (fun (tag, tyT) -> tag ^ ":" ^ string_of_type_ty ctx tyT) ftys)  ^ ">"
+  | TyProd tyTs -> "{" ^ String.join ", " (List.map (string_of_type_ty ctx) tyTs) ^ "}"
+  | _ -> "(" ^ string_of_type_ty ctx tyT ^ ")"
+
+let string_of_type ctx tyT = string_of_type_ty ctx tyT

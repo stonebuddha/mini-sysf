@@ -49,6 +49,7 @@ type term =
 
 type binding =
   | NameBind
+  | VarBind of ty
   | TyVarBind of kind
   | TyAbbBind of ty * (kind option)
   | TmAbbBind of term * (ty option)
@@ -73,3 +74,6 @@ val term_subst_top : term -> term -> term
 val type_shift : int -> ty -> ty
 val type_subst_top : ty -> ty -> ty
 val type_term_subst_top : ty -> term -> term
+
+val string_of_kind : context -> kind -> string
+val string_of_type : context -> ty -> string

@@ -24,7 +24,42 @@ let parse_file in_file =
   in
   Parsing.clear_parser (); close_in pi; result
 
-let rec process_command ctx cmd = ctx
+let check_binding ctx bind =
+  match bind with
+  | NameBind -> NameBind
+  | VarBind tyT -> VarBind tyT
+  | TyVarBind kd -> TyVarBind kd
+  | TyAbbBind (tyT, None) -> TyAbbBind (tyT, Some (kind_of ctx tyT))
+  | TyAbbBind (tyT, Some kd) ->
+    if kd = kind_of ctx tyT then TyAbbBind (tyT, Some kd) else failwith "kinds mismatch"
+  | TmAbbBind (tm, None) -> TmAbbBind (tm, Some (type_of ctx tm))
+  | TmAbbBind (tm, Some tyT) ->
+    if type_eqv ctx tyT (type_of ctx tm) then TmAbbBind (tm, Some tyT) else failwith "types mismatch"
+
+let string_of_binding_type ctx bind =
+  match bind with
+  | NameBind -> ""
+  | VarBind tyT -> ": " ^ string_of_type ctx tyT
+  | TyVarBind kd -> ":: " ^ string_of_kind ctx kd
+  | TyAbbBind (tyT, opt) -> ":: " ^
+                            (match opt with
+                             | Some kd -> string_of_kind ctx kd
+                             | None -> string_of_kind ctx (kind_of ctx tyT))
+  | TmAbbBind (tm, opt) -> ": " ^
+                           (match opt with
+                            | Some tyT -> string_of_type ctx tyT
+                            | None -> string_of_type ctx (type_of ctx tm))
+
+let rec process_command ctx cmd =
+  match cmd with
+  | Eval tm ->
+    let tyT = type_of ctx tm in
+    print_endline (string_of_type ctx tyT);
+    ctx
+  | Bind (x, bind) ->
+    let bind = check_binding ctx bind in
+    print_endline (x ^ " " ^ string_of_binding_type ctx bind);
+    add_binding ctx x bind
 
 let process_file f ctx =
   let (cmds, _) = parse_file f ctx in
