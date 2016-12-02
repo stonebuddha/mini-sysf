@@ -10,17 +10,6 @@ type base_ty =
   | BTyInt
   | BTyFloat
 
-type ty =
-  | TyVar of int * int
-  | TyBase of base_ty
-  | TyArrow of string * ty * ty
-  | TyProd of ty list
-  | TyVariant of (string * ty) list
-  | TyRec of string * kind * ty
-  | TyAll of string * kind * ty
-  | TyAbs of string * kind * ty
-  | TyApp of ty * ty
-
 type prim_bin_op =
   | PBIntAdd
   | PBIntDiff
@@ -33,7 +22,19 @@ type prim_bin_op =
   | PBGt
   | PBGe
 
-type term =
+type ty =
+  | TyVar of int * int
+  | TyBase of base_ty
+  | TyArrow of string * ty * ty
+  | TyProd of ty list
+  | TyVariant of (string * ty) list
+  | TyRec of string * kind * ty
+  | TyAll of string * kind * ty
+  | TyAbs of string * kind * ty
+  | TyApp of ty * ty
+  | TyRefined of base_ty * term
+
+and term =
   | TmVar of int * int
   | TmUnit
   | TmTrue
