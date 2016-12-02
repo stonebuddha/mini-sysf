@@ -49,6 +49,7 @@ type term =
 
 type binding =
   | NameBind
+  | TyVarBind of kind
   | TyAbbBind of ty * (kind option)
   | TmAbbBind of term * (ty option)
 
@@ -145,6 +146,7 @@ let type_shift d tyT = type_shift_above d 0 tyT
 let binding_shift d bind =
   match bind with
   | NameBind -> NameBind
+  | TyVarBind kd -> TyVarBind kd
   | TyAbbBind (tyT, opt) -> TyAbbBind (type_shift d tyT, opt)
   | TmAbbBind (tm, opt) -> TmAbbBind (term_shift d tm, Option.map (type_shift d) opt)
 

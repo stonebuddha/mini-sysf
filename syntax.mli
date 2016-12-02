@@ -49,6 +49,7 @@ type term =
 
 type binding =
   | NameBind
+  | TyVarBind of kind
   | TyAbbBind of ty * (kind option)
   | TmAbbBind of term * (ty option)
 
