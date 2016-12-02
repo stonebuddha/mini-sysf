@@ -32,7 +32,7 @@ type ty =
   | TyAll of string * kind * ty
   | TyAbs of string * kind * ty
   | TyApp of ty * ty
-  | TyRefined of base_ty * term
+  | TyRefined of base_ty * term list
 
 and term =
   | TmVar of int * int
