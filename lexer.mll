@@ -60,6 +60,7 @@ rule read =
   | "unfold"          { UNFOLD }
   | "case"            { CASE }
   | "of"              { OF }
+  | "Rec"             { REC }
   | ucid              { UCID (Lexing.lexeme lexbuf) }
   | lcid              { LCID (Lexing.lexeme lexbuf) }
   | ";"               { SEMI }
@@ -74,14 +75,14 @@ rule read =
   | "."               { DOT }
   | "["               { LSQUARE }
   | "]"               { RSQUARE }
-  | ".1"              { DOTONE }
-  | ".2"              { DOTTWO }
   | "=>"              { DARROW }
   | "|"               { VBAR }
   | "{"               { LCURLY }
   | "}"               { RCURLY }
   | "+"               { ADD }
-  | "=="              { DEQ }
+  | "=="              { EQEQ }
+  | "::"              { COLONCOLON }
+  | "*"               { STAR }
   | eof               { EOF }
   | _                 { failwith "illegal character" }
 

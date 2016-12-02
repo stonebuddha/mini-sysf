@@ -1,5 +1,9 @@
 open Batteries
 
+type kind =
+  | KdType
+  | KdArrow of kind * kind
+
 type ty =
   | TyVar of int * int
   | TyUnit
@@ -8,10 +12,12 @@ type ty =
   | TyFloat
   | TyString
   | TyArrow of ty * ty
-  | TyPair of ty * ty
+  | TyProd of ty list
   | TyVariant of (string * ty) list
-  | TyRec of string * ty
-  | TyAll of string * ty
+  | TyRec of string * kind * ty
+  | TyAll of string * kind * ty
+  | TyAbs of string * kind * ty
+  | TyApp of ty * ty
 
 type prim_bin_op =
   | PBIntAdd
@@ -27,14 +33,13 @@ type term =
   | TmString of string
   | TmAbs of string * ty * term
   | TmApp of term * term
-  | TmPair of term * term
-  | TmFst of term
-  | TmSnd of term
+  | TmTuple of term list
+  | TmProj of term * int
   | TmTag of string * term * ty
   | TmCase of term * (string * (string * term)) list
   | TmFold of ty
   | TmUnfold of ty
-  | TmTAbs of string * term
+  | TmTAbs of string * kind * term
   | TmTApp of term * ty
   | TmLet of string * term * term
   | TmFix of term
@@ -44,7 +49,7 @@ type term =
 
 type binding =
   | NameBind
-  | TyAbbBind of ty
+  | TyAbbBind of ty * (kind option)
   | TmAbbBind of term * (ty option)
 
 type command =

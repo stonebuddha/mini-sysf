@@ -1,0 +1,22 @@
+"hello";
+unit;
+lambda x:Int. x;
+lambda X. lambda x:X. x;
+let x = true in x;
+5 + 4;
+6 == 3;
+(lambda x:Bool->Bool. if x false then true else false) (lambda x:Bool. if x then false else true);
+T = Int -> Int;
+lambda f:T. lambda x:Int. f (f x);
+(lambda X. lambda x:X. x) [All X.X->X];
+{true,false};
+{true,false}.1;
+{true,false}.2;
+lambda x:<a:Bool,b:Bool>. x;
+List = All T. Rec X. <nil:Unit, cons:{Int,T}>;
+nil = lambda T. fold [List T] <nil=unit> as <nil:Unit,cons:{T, List T}>;
+cons = lambda T. lambda h:T. lambda t:List T. fold [List T] <cons={h,t}> as <nil:Unit,cons:{T, List T}>;
+hd = lambda T. lambda t:List T. lambda d:T.
+       case unfold [List T] t of
+         <nil=_> => d
+       | <cons=x> => x.1;

@@ -23,6 +23,7 @@ open Syntax
 %token UNFOLD
 %token CASE
 %token OF
+%token REC
 %token EOF
 
 %token <string> UCID
@@ -43,14 +44,14 @@ open Syntax
 %token DOT
 %token LSQUARE
 %token RSQUARE
-%token DOTONE
-%token DOTTWO
 %token DARROW
 %token VBAR
 %token LCURLY
 %token RCURLY
 %token ADD
-%token DEQ
+%token EQEQ
+%token COLONCOLON
+%token STAR
 
 %start <Syntax.context -> (Syntax.command list * Syntax.context)> top_level
 
@@ -60,7 +61,7 @@ top_level: top = rev_top_level; EOF { fun ctx -> let (cmds, ctx) = top ctx in (L
 
 rev_top_level:
   | (* empty *) { fun ctx -> ([], ctx) }
-  | top = rev_top_level; SEMI; cmd = command
+  | top = rev_top_level; cmd = command; SEMI
     { fun ctx ->
       let (cmds, ctx) = top ctx in
       let (cmd, ctx) = cmd ctx in
@@ -70,7 +71,24 @@ rev_top_level:
 command:
   | e = term { fun ctx -> (Eval (e ctx), ctx) }
   | x = LCID; EQ; e = term { fun ctx -> (Bind (x, TmAbbBind (e ctx, None)), add_name ctx x) }
-  | x = UCID; EQ; t = ty { fun ctx -> (Bind (x, TyAbbBind (t ctx)), add_name ctx x) }
+  | x = UCID; EQ; t = ty { fun ctx -> (Bind (x, TyAbbBind (t ctx, None)), add_name ctx x) }
+  ;
+
+kind: k = arrow_kind {k};
+
+arrow_kind:
+  | k1 = atom_kind; DARROW; k2 = arrow_kind { fun ctx -> KdArrow (k1 ctx, k2 ctx) }
+  | k = atom_kind { k }
+  ;
+
+atom_kind:
+  | STAR { fun ctx -> KdType }
+  | LPAREN; k = kind; RPAREN { k }
+  ;
+
+option_kind:
+  | (* empty *) { fun ctx -> KdType }
+  | COLONCOLON; k = kind { k }
   ;
 
 atom_ty:
@@ -83,21 +101,29 @@ atom_ty:
   | TFLOAT { fun ctx -> TyFloat }
   | TSTRING { fun ctx -> TyString }
   | LT; ts = separated_list(COMMA, field_ty); GT { fun ctx -> TyVariant (List.map (fun t -> t ctx) ts) }
+  | LCURLY; ts = separated_list(COMMA, ty); RCURLY { fun ctx -> TyProd (List.map (fun t -> t ctx) ts) }
   ;
 
 field_ty:
   | x = LCID; COLON; t = ty { fun ctx -> (x, t ctx) }
   ;
 
-arrow_ty:
-  | t1 = atom_ty; ARROW; t2 = arrow_ty { fun ctx -> TyArrow (t1 ctx, t2 ctx) }
+app_ty:
+  | t1 = app_ty; t2 = atom_ty { fun ctx -> TyApp (t1 ctx, t2 ctx) }
   | t = atom_ty { t }
+  ;
+
+arrow_ty:
+  | t1 = app_ty; ARROW; t2 = arrow_ty { fun ctx -> TyArrow (t1 ctx, t2 ctx) }
+  | t = app_ty { t }
   ;
 
 ty:
   | t = arrow_ty { t }
-  | ALL; x = UCID; DOT; t = ty
-    { fun ctx -> let ctx' = add_name ctx x in TyAll (x, t ctx') }
+  | ALL; x = UCID; k = option_kind; DOT; t = ty
+    { fun ctx -> let ctx' = add_name ctx x in TyAll (x, k ctx, t ctx') }
+  | REC; x = UCID; k = option_kind; DOT; t = ty
+    { fun ctx -> let ctx' = add_name ctx x in TyRec (x, k ctx, t ctx') }
   ;
 
 term:
@@ -108,8 +134,8 @@ term:
     { fun ctx -> let ctx' = add_name ctx x in TmLet (x, e1 ctx, e2 ctx') }
   | IF; e1 = term; THEN; e2 = term; ELSE; e3 = term
     { fun ctx -> TmIf (e1 ctx, e2 ctx, e3 ctx) }
-  | LAMBDA; x = UCID; DOT; e = term
-    { fun ctx -> let ctx' = add_name ctx x in TmTAbs (x, e ctx') }
+  | LAMBDA; x = UCID; k = option_kind; DOT; e = term
+    { fun ctx -> let ctx' = add_name ctx x in TmTAbs (x, k ctx, e ctx') }
   | CASE; e = term; OF; cs = separated_list(VBAR, case)
     { fun ctx -> TmCase (e ctx, List.map (fun c -> c ctx) cs) }
   ;
@@ -134,12 +160,11 @@ app_term:
 
 prim_bin_op:
   | ADD { PBIntAdd }
-  | DEQ { PBEq }
+  | EQEQ { PBEq }
   ;
 
 path_term:
-  | e = path_term; DOTONE { fun ctx -> TmFst (e ctx) }
-  | e = path_term; DOTTWO { fun ctx -> TmSnd (e ctx) }
+  | e = path_term; DOT; i = INTV { fun ctx -> TmProj (e ctx, i) }
   | e = ascribe_term { e }
   ;
 
@@ -157,6 +182,6 @@ atom_term:
   | i = INTV { fun ctx -> TmInt i }
   | f = FLOATV { fun ctx -> TmFloat f }
   | s = STRINGV { fun ctx -> TmString s }
-  | LCURLY; e1 = term; COMMA; e2 = term; RCURLY { fun ctx -> TmPair (e1 ctx, e2 ctx) }
+  | LCURLY; es = separated_list(COMMA, term); RCURLY { fun ctx -> TmTuple (List.map (fun e -> e ctx) es) }
   | LT; tag = LCID; EQ; e = term; GT; AS; t = ty { fun ctx -> TmTag (tag, e ctx, t ctx) }
   ;

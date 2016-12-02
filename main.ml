@@ -2,6 +2,18 @@ open Batteries
 open Format
 open Syntax
 
+let parse_args () =
+  let in_file = ref (None : string option) in
+  Arg.parse []
+    (fun s ->
+       match !in_file with
+       | Some _ -> failwith "you must specify exactly one input file"
+       | None -> in_file := Some s)
+    "";
+  match !in_file with
+  | Some s -> s
+  | None -> failwith "you must specify an input file"
+
 let parse_file in_file =
   let pi = open_in in_file in
   let lexbuf = Lexing.from_channel pi in
@@ -23,6 +35,8 @@ let process_file f ctx =
   List.fold_left g ctx cmds
 
 let main () =
-  print_endline "Hello World!"
+  let in_file = parse_args () in
+  let _ = process_file in_file empty_ctx in
+  ()
 
 let () = main ()
