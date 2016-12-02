@@ -124,6 +124,8 @@ ty:
     { fun ctx -> let ctx' = add_name ctx x in TyAll (x, k ctx, t ctx') }
   | REC; x = UCID; k = option_kind; DOT; t = ty
     { fun ctx -> let ctx' = add_name ctx x in TyRec (x, k ctx, t ctx') }
+  | LAMBDA; x = UCID; k = option_kind; DOT; t = ty
+    { fun ctx -> let ctx' = add_name ctx x in TyAbs (x, k ctx, t ctx') }
   ;
 
 term:
