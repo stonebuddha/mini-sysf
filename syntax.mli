@@ -13,7 +13,7 @@ type base_ty =
 type ty =
   | TyVar of int * int
   | TyBase of base_ty
-  | TyArrow of ty * ty
+  | TyArrow of string * ty * ty
   | TyProd of ty list
   | TyVariant of (string * ty) list
   | TyRec of string * kind * ty

@@ -13,7 +13,7 @@ type base_ty =
 type ty =
   | TyVar of int * int
   | TyBase of base_ty
-  | TyArrow of ty * ty
+  | TyArrow of string * ty * ty
   | TyProd of ty list
   | TyVariant of (string * ty) list
   | TyRec of string * kind * ty
@@ -96,7 +96,7 @@ let type_map on_var c tyT =
     match tyT with
     | TyVar (x, n) -> on_var c x n
     | TyBase btyT -> TyBase btyT
-    | TyArrow (tyT1, tyT2) -> TyArrow (walk c tyT1, walk c tyT2)
+    | TyArrow (x, tyT1, tyT2) -> TyArrow (x, walk c tyT1, walk (c + 1) tyT2)
     | TyProd tyTs -> TyProd (List.map (walk c) tyTs)
     | TyVariant ftys -> TyVariant (List.map (fun (tag, tyT) -> (tag, walk c tyT)) ftys)
     | TyRec (x, kd1, tyT2) -> TyRec (x, kd1, walk (c + 1) tyT2)
@@ -228,8 +228,9 @@ let rec string_of_type_ty ctx tyT =
 
 and string_of_type_arrow_ty ctx tyT =
   match tyT with
-  | TyArrow (tyT1, tyT2) ->
-    string_of_type_app_ty ctx tyT1 ^ " -> " ^ string_of_type_arrow_ty ctx tyT2
+  | TyArrow (x, tyT1, tyT2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    x ^ ":" ^ string_of_type_app_ty ctx tyT1 ^ " -> " ^ string_of_type_arrow_ty ctx' tyT2
   | _ -> string_of_type_app_ty ctx tyT
 
 and string_of_type_app_ty ctx tyT =

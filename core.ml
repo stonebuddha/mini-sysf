@@ -38,7 +38,9 @@ let rec type_eqv ctx tyT1 tyT2 =
   | (_, TyVar (i, _)) when is_ty_abb ctx i -> type_eqv ctx tyT1 (get_ty_abb ctx i)
   | (TyVar (i, _), TyVar (j, _)) -> i = j
   | (TyBase btyT1, TyBase btyT2) -> btyT1 = btyT2
-  | (TyArrow (tyT11, tyT12), TyArrow (tyT21, tyT22)) -> type_eqv ctx tyT11 tyT21 && type_eqv ctx tyT12 tyT22
+  | (TyArrow (x, tyT11, tyT12), TyArrow (_, tyT21, tyT22)) ->
+    let ctx' = add_name ctx x in
+    type_eqv ctx tyT11 tyT21 && type_eqv ctx' tyT12 tyT22
   | (TyProd tyTs1, TyProd tyTs2) ->
     List.length tyTs1 = List.length tyTs2 &&
     List.for_all (fun (tyT1, tyT2) -> type_eqv ctx tyT1 tyT2) (List.combine tyTs1 tyTs2)
@@ -63,6 +65,32 @@ let rec type_eqv ctx tyT1 tyT2 =
   | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_eqv ctx tyT11 tyT21 && type_eqv ctx tyT12 tyT22
   | _ -> false
 
+let rec type_sub ctx tyT1 tyT2 =
+  let tyT1 = simplify_type ctx tyT1 in
+  let tyT2 = simplify_type ctx tyT2 in
+  match (tyT1, tyT2) with
+  | (TyVar (i, _), _) when is_ty_abb ctx i -> type_sub ctx (get_ty_abb ctx i) tyT2
+  | (_, TyVar (i, _)) when is_ty_abb ctx i -> type_sub ctx tyT1 (get_ty_abb ctx i)
+  | (TyVar (i, _), TyVar (j, _)) -> i = j
+  | (TyBase btyT1, TyBase btyT2) -> btyT1 = btyT2
+  | (TyArrow (x, tyT11, tyT12), TyArrow (_, tyT21, tyT22)) ->
+    let ctx' = add_name ctx x in
+    type_sub ctx tyT21 tyT11 && type_sub ctx' tyT12 tyT22
+  | (TyProd tyTs1, TyProd tyTs2) ->
+    List.length tyTs1 >= List.length tyTs2 &&
+    List.for_all (fun (tyT1, tyT2) -> type_sub ctx tyT1 tyT2) (List.combine tyTs1 tyTs2)
+  | (TyVariant ftys1, TyVariant ftys2) ->
+    List.length ftys1 = List.length ftys2 &&
+    List.for_all
+      (fun (tag2, tyT2) ->
+         try
+           let tyT1 = List.assoc tag2 ftys1 in
+           type_sub ctx tyT1 tyT2
+         with Not_found -> false)
+      ftys2
+  | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_sub ctx tyT11 tyT21 && type_sub ctx tyT12 tyT22
+  | _ -> false
+
 let get_kind ctx i =
   match get_binding ctx i with
   | TyVarBind kd -> kd
@@ -73,8 +101,8 @@ let rec kind_of ctx tyT =
   match tyT with
   | TyVar (i, _) -> get_kind ctx i
   | TyBase _ -> KdType
-  | TyArrow (tyT1, tyT2) ->
-    if kind_of ctx tyT1 = KdType && kind_of ctx tyT2 = KdType then KdType
+  | TyArrow (x, tyT1, tyT2) ->
+    if kind_of ctx tyT1 = KdType && kind_of (add_binding ctx x (VarBind tyT1)) tyT2 = KdType then KdType
     else failwith "type kind expected"
   | TyProd tyTs ->
     if List.for_all (fun tyT -> kind_of ctx tyT = KdType) tyTs then KdType
@@ -118,12 +146,12 @@ let rec type_of ctx tm =
     check_kind_type ctx tyT1;
     let ctx' = add_binding ctx x (VarBind tyT1) in
     let tyT2 = type_of ctx' tm2 in
-    TyArrow (tyT1, type_shift (-1) tyT2)
+    TyArrow (x, tyT1, tyT2)
   | TmApp (tm1, tm2) ->
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of ctx tm2 in
     (match simplify_type ctx tyT1 with
-     | TyArrow (tyT11, tyT12) when type_eqv ctx tyT2 tyT11 -> tyT12
+     | TyArrow (x, tyT11, tyT12) when type_eqv ctx tyT2 tyT11 -> type_shift (-1) tyT12 (* FIXME: subst term in type *)
      | _ -> failwith "failure when typing application")
   | TmTuple tms -> TyProd (List.map (type_of ctx) tms)
   | TmProj (tm1, i) ->
@@ -160,11 +188,11 @@ let rec type_of ctx tm =
      | _ -> failwith "failure with case expression")
   | TmFold tyT ->
     (match simplify_type ctx tyT with
-     | TyRec (x, kd1, tyT2) -> TyArrow (type_subst_top tyT tyT2, tyT)
+     | TyRec (x, kd1, tyT2) -> TyArrow ("_", type_subst_top tyT tyT2, type_shift 1 tyT) (* FIXME: deal with fold directly *)
      | _ -> failwith "failure with fold")
   | TmUnfold tyT ->
     (match simplify_type ctx tyT with
-     | TyRec (x, kd1, tyT2) -> TyArrow (tyT, type_subst_top tyT tyT2)
+     | TyRec (x, kd1, tyT2) -> TyArrow ("_", tyT, type_shift 1 (type_subst_top tyT tyT2)) (* FIXME: deal with unfold directly *)
      | _ -> failwith "failure with unfold")
   | TmTAbs (x, kd1, tm2) ->
     let ctx' = add_binding ctx x (TyVarBind kd1) in
@@ -184,7 +212,7 @@ let rec type_of ctx tm =
   | TmFix tm1 ->
     let tyT1 = type_of ctx tm1 in
     (match simplify_type ctx tyT1 with
-     | TyArrow (tyT11, tyT12) when type_eqv ctx tyT11 tyT12 -> tyT12
+     | TyArrow (_, tyT11, tyT12) when type_eqv ctx tyT11 (type_shift (-1) tyT12) -> type_shift (-1) tyT12
      | _ -> failwith "failure when typing fix expression")
   | TmIf (tm1, tm2, tm3) ->
     if type_eqv ctx (type_of ctx tm1) (TyBase BTyBool) then

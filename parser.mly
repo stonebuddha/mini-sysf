@@ -122,7 +122,7 @@ app_ty:
   ;
 
 arrow_ty:
-  | t1 = app_ty; ARROW; t2 = arrow_ty { fun ctx -> TyArrow (t1 ctx, t2 ctx) }
+  | x = LCID; COLON; t1 = app_ty; ARROW; t2 = arrow_ty { fun ctx -> TyArrow (x, t1 ctx, t2 (add_name ctx x)) }
   | t = app_ty { t }
   ;
 
