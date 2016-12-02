@@ -4,13 +4,16 @@ type kind =
   | KdType
   | KdArrow of kind * kind
 
+type base_ty =
+  | BTyUnit
+  | BTyBool
+  | BTyInt
+  | BTyFloat
+  | BTyString
+
 type ty =
   | TyVar of int * int
-  | TyUnit
-  | TyBool
-  | TyInt
-  | TyFloat
-  | TyString
+  | TyBase of base_ty
   | TyArrow of ty * ty
   | TyProd of ty list
   | TyVariant of (string * ty) list

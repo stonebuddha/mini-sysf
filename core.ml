@@ -37,11 +37,7 @@ let rec type_eqv ctx tyT1 tyT2 =
   | (TyVar (i, _), _) when is_ty_abb ctx i -> type_eqv ctx (get_ty_abb ctx i) tyT2
   | (_, TyVar (i, _)) when is_ty_abb ctx i -> type_eqv ctx tyT1 (get_ty_abb ctx i)
   | (TyVar (i, _), TyVar (j, _)) -> i = j
-  | (TyUnit, TyUnit) -> true
-  | (TyBool, TyBool) -> true
-  | (TyInt, TyInt) -> true
-  | (TyFloat, TyFloat) -> true
-  | (TyString, TyString) -> true
+  | (TyBase btyT1, TyBase btyT2) -> btyT1 = btyT2
   | (TyArrow (tyT11, tyT12), TyArrow (tyT21, tyT22)) -> type_eqv ctx tyT11 tyT21 && type_eqv ctx tyT12 tyT22
   | (TyProd tyTs1, TyProd tyTs2) ->
     List.length tyTs1 = List.length tyTs2 &&
@@ -76,11 +72,7 @@ let get_kind ctx i =
 let rec kind_of ctx tyT =
   match tyT with
   | TyVar (i, _) -> get_kind ctx i
-  | TyUnit -> KdType
-  | TyBool -> KdType
-  | TyInt -> KdType
-  | TyFloat -> KdType
-  | TyString -> KdType
+  | TyBase _ -> KdType
   | TyArrow (tyT1, tyT2) ->
     if kind_of ctx tyT1 = KdType && kind_of ctx tyT2 = KdType then KdType
     else failwith "type kind expected"
@@ -117,12 +109,12 @@ let check_kind_type ctx tyT =
 let rec type_of ctx tm =
   match tm with
   | TmVar (i, _) -> get_type_from_context ctx i
-  | TmUnit -> TyUnit
-  | TmTrue -> TyBool
-  | TmFalse -> TyBool
-  | TmInt _ -> TyInt
-  | TmFloat _ -> TyFloat
-  | TmString _ -> TyString
+  | TmUnit -> TyBase BTyUnit
+  | TmTrue -> TyBase BTyBool
+  | TmFalse -> TyBase BTyBool
+  | TmInt _ -> TyBase BTyInt
+  | TmFloat _ -> TyBase BTyFloat
+  | TmString _ -> TyBase BTyString
   | TmAbs (x, tyT1, tm2) ->
     check_kind_type ctx tyT1;
     let ctx' = add_binding ctx x (VarBind tyT1) in
@@ -196,7 +188,7 @@ let rec type_of ctx tm =
      | TyArrow (tyT11, tyT12) when type_eqv ctx tyT11 tyT12 -> tyT12
      | _ -> failwith "failure when typing fix expression")
   | TmIf (tm1, tm2, tm3) ->
-    if type_eqv ctx (type_of ctx tm1) TyBool then
+    if type_eqv ctx (type_of ctx tm1) (TyBase BTyBool) then
       let tyT2 = type_of ctx tm2 in
       if type_eqv ctx (type_of ctx tm3) tyT2 then tyT2 else failwith "failure with if expression"
     else
@@ -208,15 +200,15 @@ let rec type_of ctx tm =
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of ctx tm2 in
     (match bop with
-     | PBIntAdd -> if type_eqv ctx tyT1 TyInt && type_eqv ctx tyT2 TyInt then TyInt else failwith "failure with bop"
+     | PBIntAdd -> if type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt) then (TyBase BTyInt) else failwith "failure with bop"
      | PBEq ->
        if
-         (type_eqv ctx tyT1 TyUnit && type_eqv ctx tyT2 TyUnit) ||
-         (type_eqv ctx tyT1 TyBool && type_eqv ctx tyT2 TyBool) ||
-         (type_eqv ctx tyT1 TyInt && type_eqv ctx tyT2 TyInt) ||
-         (type_eqv ctx tyT1 TyFloat && type_eqv ctx tyT2 TyFloat) ||
-         (type_eqv ctx tyT1 TyString && type_eqv ctx tyT2 TyString)
+         (type_eqv ctx tyT1 (TyBase BTyUnit) && type_eqv ctx tyT2 (TyBase BTyUnit)) ||
+         (type_eqv ctx tyT1 (TyBase BTyBool) && type_eqv ctx tyT2 (TyBase BTyBool)) ||
+         (type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt)) ||
+         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat)) ||
+         (type_eqv ctx tyT1 (TyBase BTyString) && type_eqv ctx tyT2 (TyBase BTyString))
        then
-         TyBool
+         TyBase BTyBool
        else
          failwith "failure with bop")

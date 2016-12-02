@@ -4,13 +4,16 @@ type kind =
   | KdType
   | KdArrow of kind * kind
 
+type base_ty =
+  | BTyUnit
+  | BTyBool
+  | BTyInt
+  | BTyFloat
+  | BTyString
+
 type ty =
   | TyVar of int * int
-  | TyUnit
-  | TyBool
-  | TyInt
-  | TyFloat
-  | TyString
+  | TyBase of base_ty
   | TyArrow of ty * ty
   | TyProd of ty list
   | TyVariant of (string * ty) list
@@ -86,11 +89,7 @@ let type_map on_var c tyT =
   let rec walk c tyT =
     match tyT with
     | TyVar (x, n) -> on_var c x n
-    | TyUnit -> TyUnit
-    | TyBool -> TyBool
-    | TyInt -> TyInt
-    | TyFloat -> TyFloat
-    | TyString -> TyString
+    | TyBase btyT -> TyBase btyT
     | TyArrow (tyT1, tyT2) -> TyArrow (walk c tyT1, walk c tyT2)
     | TyProd tyTs -> TyProd (List.map (walk c) tyTs)
     | TyVariant ftys -> TyVariant (List.map (fun (tag, tyT) -> (tag, walk c tyT)) ftys)
@@ -237,11 +236,11 @@ and string_of_type_app_ty ctx tyT =
 and string_of_type_atom_ty ctx tyT =
   match tyT with
   | TyVar (i, _) -> index_to_name ctx i
-  | TyUnit -> "Unit"
-  | TyBool -> "Bool"
-  | TyInt -> "Int"
-  | TyFloat -> "Float"
-  | TyString -> "String"
+  | TyBase BTyUnit -> "Unit"
+  | TyBase BTyBool -> "Bool"
+  | TyBase BTyInt -> "Int"
+  | TyBase BTyFloat -> "Float"
+  | TyBase BTyString -> "String"
   | TyVariant ftys -> "<" ^ String.join ", " (List.map (fun (tag, tyT) -> tag ^ ":" ^ string_of_type_ty ctx tyT) ftys)  ^ ">"
   | TyProd tyTs -> "{" ^ String.join ", " (List.map (string_of_type_ty ctx) tyTs) ^ "}"
   | _ -> "(" ^ string_of_type_ty ctx tyT ^ ")"
