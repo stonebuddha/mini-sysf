@@ -62,7 +62,13 @@ val ctx_length : context -> int
 val add_binding : context -> string -> binding -> context
 val add_name : context -> string -> context
 val index_to_name : context -> int -> string
-(* val get_binding : context -> int -> binding *)
+val get_binding : context -> int -> binding
 val name_to_index : context -> string -> int
 val is_name_bound : context -> string -> bool
-(* val get_type_from_context : context -> int -> ty *)
+val get_type_from_context : context -> int -> ty
+
+val term_shift : int -> term -> term
+val term_subst_top : term -> term -> term
+val type_shift : int -> ty -> ty
+val type_subst_top : ty -> ty -> ty
+val type_term_subst_top : ty -> term -> term

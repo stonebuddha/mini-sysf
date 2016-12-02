@@ -1,6 +1,7 @@
 open Batteries
 open Format
 open Syntax
+open Core
 
 let parse_args () =
   let in_file = ref (None : string option) in
