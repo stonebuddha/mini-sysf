@@ -24,3 +24,8 @@ tl = lambda T. lambda t:List T.
        case unfold [List T] t of
          <nil=_> => nil [T]
        | <cons=x> => x.2;
+Opt = lambda T. <none:Unit, some:T>;
+hd_err = lambda T. lambda t:List T.
+           case unfold [List T] t of
+             <nil=_> => <none=unit> as Opt T
+           | <cons=x> => <some=x.1> as Opt T;
