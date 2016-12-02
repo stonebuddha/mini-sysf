@@ -1,5 +1,6 @@
 open Batteries
 open Syntax
+open Smt
 
 exception No_rule_applies
 
