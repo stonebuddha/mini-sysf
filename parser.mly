@@ -23,6 +23,7 @@ open Syntax
 %token CASE
 %token OF
 %token REC
+%token RETURN
 %token EOF
 
 %token <string> UCID
@@ -142,12 +143,17 @@ term:
     { fun ctx -> let ctx' = add_name ctx x in TmAbs (x, t ctx, e ctx') }
   | LET; x = LCID; EQ; e1 = term; IN; e2 = term
     { fun ctx -> let ctx' = add_name ctx x in TmLet (x, e1 ctx, e2 ctx') }
-  | IF; e1 = term; THEN; e2 = term; ELSE; e3 = term
-    { fun ctx -> TmIf (e1 ctx, e2 ctx, e3 ctx) }
+  | IF; e1 = term; r = option_return; THEN; e2 = term; ELSE; e3 = term
+    { fun ctx -> TmIf (e1 ctx, r ctx, e2 (add_name ctx "_"), e3 (add_name ctx "_")) }
   | LAMBDA; x = UCID; k = option_kind; DOT; e = term
     { fun ctx -> let ctx' = add_name ctx x in TmTAbs (x, k ctx, e ctx') }
-  | CASE; e = term; OF; cs = separated_list(VBAR, case)
-    { fun ctx -> TmCase (e ctx, List.map (fun c -> c ctx) cs) }
+  | CASE; e = term; r = option_return; OF; cs = separated_list(VBAR, case)
+    { fun ctx -> TmCase (e ctx, r ctx, List.map (fun c -> c ctx) cs) }
+  ;
+
+option_return:
+  | (* empty *) { fun ctx -> None }
+  | RETURN; t = ty { fun ctx -> Some (t ctx) }
   ;
 
 case: LT; tag = LCID; EQ; x = LCID; GT; DARROW; e = app_term { fun ctx -> let ctx' = add_name ctx x in (tag, (x, e ctx')) };

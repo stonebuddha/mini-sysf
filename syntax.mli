@@ -32,7 +32,7 @@ type ty =
   | TyAll of string * kind * ty
   | TyAbs of string * kind * ty
   | TyApp of ty * ty
-  | TyRefined of base_ty * term list
+  | TyRefined of string * base_ty * term list
 
 and term =
   | TmVar of int * int
@@ -46,14 +46,14 @@ and term =
   | TmTuple of term list
   | TmProj of term * int
   | TmTag of string * term * ty
-  | TmCase of term * (string * (string * term)) list
+  | TmCase of term * ty option * (string * (string * term)) list
   | TmFold of ty
   | TmUnfold of ty
   | TmTAbs of string * kind * term
   | TmTApp of term * ty
   | TmLet of string * term * term
   | TmFix of term
-  | TmIf of term * term * term
+  | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
   | TmPrimBinOp of prim_bin_op * term * term
 
@@ -84,6 +84,7 @@ val term_subst_top : term -> term -> term
 val type_shift : int -> ty -> ty
 val type_subst_top : ty -> ty -> ty
 val type_term_subst_top : ty -> term -> term
+val term_type_subst_top : term -> ty -> ty
 
 val string_of_kind : context -> kind -> string
 val string_of_type : context -> ty -> string

@@ -129,20 +129,24 @@ let rec kind_of ctx tyT =
     (match kd1 with
      | KdArrow (kd11, kd12) when kd2 = kd11 -> kd12
      | _ -> failwith "failure with type-level application")
+  | TyRefined (x, btyT, tms) ->
+    let ctx' = add_binding ctx x (VarBind (TyBase btyT)) in
+    if List.for_all (fun tm -> type_sub ctx' (type_of ctx' tm) (TyBase BTyBool)) tms then KdType
+    else failwith "failure with refined type"
 
-let check_kind_type ctx tyT =
+and check_kind_type ctx tyT =
   match kind_of ctx tyT with
   | KdType -> ()
   | _ -> failwith "check_kind_type"
 
-let rec type_of ctx tm =
+and type_of ctx tm =
   match tm with
   | TmVar (i, _) -> get_type_from_context ctx i
-  | TmUnit -> TyBase BTyUnit
-  | TmTrue -> TyBase BTyBool
-  | TmFalse -> TyBase BTyBool
-  | TmInt _ -> TyBase BTyInt
-  | TmFloat _ -> TyBase BTyFloat
+  | TmUnit -> TyRefined ("_v", BTyUnit, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmUnit)])
+  | TmTrue -> TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmTrue)])
+  | TmFalse -> TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmFalse)])
+  | TmInt i -> TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmInt i)])
+  | TmFloat f -> TyRefined ("_v", BTyFloat, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmFloat f)])
   | TmAbs (x, tyT1, tm2) ->
     check_kind_type ctx tyT1;
     let ctx' = add_binding ctx x (VarBind tyT1) in
@@ -152,7 +156,7 @@ let rec type_of ctx tm =
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of ctx tm2 in
     (match simplify_type ctx tyT1 with
-     | TyArrow (x, tyT11, tyT12) when type_eqv ctx tyT2 tyT11 -> type_shift (-1) tyT12 (* FIXME: subst term in type *)
+     | TyArrow (x, tyT11, tyT12) when type_sub ctx tyT2 tyT11 -> term_type_subst_top tm2 tyT12
      | _ -> failwith "failure when typing application")
   | TmTuple tms -> TyProd (List.map (type_of ctx) tms)
   | TmProj (tm1, i) ->
@@ -164,10 +168,10 @@ let rec type_of ctx tm =
     check_kind_type ctx tyT2;
     let tyT1 = type_of ctx tm1 in
     (match simplify_type ctx tyT2 with
-     | TyVariant ftys -> (try if type_eqv ctx tyT1 (List.assoc tag ftys) then tyT2 else failwith "failure with tag expression"
+     | TyVariant ftys -> (try if type_sub ctx tyT1 (List.assoc tag ftys) then tyT2 else failwith "failure with tag expression"
                           with Not_found -> failwith "failure with tag expression")
      | _ -> failwith "failure with tag expression")
-  | TmCase (tm1, cases) ->
+  | TmCase (tm1, opt, cases) ->
     (match simplify_type ctx (type_of ctx tm1) with
      | TyVariant ftys ->
        if List.length ftys = List.length cases then
@@ -177,23 +181,26 @@ let rec type_of ctx tm =
                (fun (tag, tyT) ->
                   let (x, tm) = List.assoc tag cases in
                   let ctx' = add_binding ctx x (VarBind tyT) in
-                  type_shift (-1) (type_of ctx' tm))
+                  (ctx', type_of ctx' tm))
                ftys
            in
-           let tyThd = List.hd tyTrets in
-           let tyTtl = List.tl tyTrets in
-           if List.for_all (type_eqv ctx tyThd) tyTtl then tyThd else failwith "failure with case expression"
+           match opt with
+           | Some tyTret ->
+             if List.for_all (fun (ctx', tyT') -> type_sub ctx' tyT' (type_shift 1 tyTret)) tyTrets then
+               tyTret
+             else failwith "failure with case expression"
+           | _ -> failwith "TODO"
          with Not_found -> failwith "failure with case expression"
        else
          failwith "failure with case expression"
      | _ -> failwith "failure with case expression")
   | TmFold tyT ->
     (match simplify_type ctx tyT with
-     | TyRec (x, kd1, tyT2) -> TyArrow ("_", type_subst_top tyT tyT2, type_shift 1 tyT) (* FIXME: deal with fold directly *)
+     | TyRec (x, kd1, tyT2) -> TyArrow ("_", type_subst_top tyT tyT2, type_shift 1 tyT) (* TODO: deal with fold directly *)
      | _ -> failwith "failure with fold")
   | TmUnfold tyT ->
     (match simplify_type ctx tyT with
-     | TyRec (x, kd1, tyT2) -> TyArrow ("_", tyT, type_shift 1 (type_subst_top tyT tyT2)) (* FIXME: deal with unfold directly *)
+     | TyRec (x, kd1, tyT2) -> TyArrow ("_", tyT, type_shift 1 (type_subst_top tyT tyT2)) (* TODO: deal with unfold directly *)
      | _ -> failwith "failure with unfold")
   | TmTAbs (x, kd1, tm2) ->
     let ctx' = add_binding ctx x (TyVarBind kd1) in
@@ -209,21 +216,29 @@ let rec type_of ctx tm =
   | TmLet (x, tm1, tm2) ->
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of (add_binding ctx x (VarBind tyT1)) tm2 in
-    type_shift (-1) tyT2
+    type_shift (-1) tyT2 (* FIXME: check no escape *)
   | TmFix tm1 ->
     let tyT1 = type_of ctx tm1 in
     (match simplify_type ctx tyT1 with
-     | TyArrow (_, tyT11, tyT12) when type_eqv ctx tyT11 (type_shift (-1) tyT12) -> type_shift (-1) tyT12
+     | TyArrow (_, tyT11, tyT12) when type_eqv ctx tyT11 (type_shift (-1) tyT12) -> type_shift (-1) tyT12 (* FIXME: check no escape *)
      | _ -> failwith "failure when typing fix expression")
-  | TmIf (tm1, tm2, tm3) ->
-    if type_eqv ctx (type_of ctx tm1) (TyBase BTyBool) then
-      let tyT2 = type_of ctx tm2 in
-      if type_eqv ctx (type_of ctx tm3) tyT2 then tyT2 else failwith "failure with if expression"
+  | TmIf (tm1, opt, tm2, tm3) ->
+    if type_sub ctx (type_of ctx tm1) (TyBase BTyBool) then
+      let ctx2 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [tm1]))) in
+      let ctx3 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [tm1]))) in (* FIXME: not *)
+      let tyT2 = type_of ctx2 tm2 in
+      let tyT3 = type_of ctx3 tm3 in
+      match opt with
+      | Some tyTret ->
+        if type_sub ctx2 tyT2 (type_shift 1 tyTret) && type_sub ctx3 tyT3 (type_shift 1 tyTret) then
+          tyTret
+        else failwith "failure with if expression"
+      | _ -> failwith "TODO"
     else
       failwith "failure with if expression"
   | TmAscribe (tm1, tyT2) ->
     check_kind_type ctx tyT2;
-    if type_eqv ctx (type_of ctx tm1) tyT2 then tyT2 else failwith "failure with ascription"
+    if type_sub ctx (type_of ctx tm1) tyT2 then tyT2 else failwith "failure with ascription"
   | TmPrimBinOp (bop, tm1, tm2) ->
     let tyT1 = type_of ctx tm1 in
     let tyT2 = type_of ctx tm2 in
@@ -232,16 +247,18 @@ let rec type_of ctx tm =
      | PBIntDiff
      | PBIntMul
      | PBIntDiv ->
-       if type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt) then (TyBase BTyInt) else failwith "failure with bop"
+       if type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt) then
+         TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+       else failwith "failure with bop"
      | PBEq
      | PBNe ->
        if
-         (type_eqv ctx tyT1 (TyBase BTyUnit) && type_eqv ctx tyT2 (TyBase BTyUnit)) ||
-         (type_eqv ctx tyT1 (TyBase BTyBool) && type_eqv ctx tyT2 (TyBase BTyBool)) ||
-         (type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt)) ||
-         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat))
+         (type_sub ctx tyT1 (TyBase BTyUnit) && type_sub ctx tyT2 (TyBase BTyUnit)) ||
+         (type_sub ctx tyT1 (TyBase BTyBool) && type_sub ctx tyT2 (TyBase BTyBool)) ||
+         (type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt)) ||
+         (type_sub ctx tyT1 (TyBase BTyFloat) && type_sub ctx tyT2 (TyBase BTyFloat))
        then
-         TyBase BTyBool
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
        else
          failwith "failure with bop"
      | PBLt
@@ -249,9 +266,9 @@ let rec type_of ctx tm =
      | PBGt
      | PBGe ->
        if
-         (type_eqv ctx tyT1 (TyBase BTyInt) && type_eqv ctx tyT2 (TyBase BTyInt)) ||
-         (type_eqv ctx tyT1 (TyBase BTyFloat) && type_eqv ctx tyT2 (TyBase BTyFloat))
+         (type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt)) ||
+         (type_sub ctx tyT1 (TyBase BTyFloat) && type_sub ctx tyT2 (TyBase BTyFloat))
        then
-         TyBase BTyBool
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
        else
          failwith "failure with bop")

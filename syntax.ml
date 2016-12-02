@@ -32,7 +32,7 @@ type ty =
   | TyAll of string * kind * ty
   | TyAbs of string * kind * ty
   | TyApp of ty * ty
-  | TyRefined of base_ty * term list
+  | TyRefined of string * base_ty * term list
 
 and term =
   | TmVar of int * int
@@ -46,14 +46,14 @@ and term =
   | TmTuple of term list
   | TmProj of term * int
   | TmTag of string * term * ty
-  | TmCase of term * (string * (string * term)) list
+  | TmCase of term * ty option * (string * (string * term)) list
   | TmFold of ty
   | TmUnfold of ty
   | TmTAbs of string * kind * term
   | TmTApp of term * ty
   | TmLet of string * term * term
   | TmFix of term
-  | TmIf of term * term * term
+  | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
   | TmPrimBinOp of prim_bin_op * term * term
 
@@ -92,7 +92,7 @@ let rec is_name_bound ctx x =
   | [] -> false
   | (y, _) :: rest -> if y = x then true else is_name_bound rest x
 
-let type_map on_var c tyT =
+let type_map on_var on_term c tyT =
   let rec walk c tyT =
     match tyT with
     | TyVar (x, n) -> on_var c x n
@@ -104,6 +104,7 @@ let type_map on_var c tyT =
     | TyAll (x, kd1, tyT2) -> TyAll (x, kd1, walk (c + 1) tyT2)
     | TyAbs (x, kd1, tyT2) -> TyAbs (x, kd1, walk (c + 1) tyT2)
     | TyApp (tyT1, tyT2) -> TyApp (walk c tyT1, walk c tyT2)
+    | TyRefined (x, btyT, tms) -> TyRefined (x, btyT, List.map (on_term (c + 1)) tms)
   in
   walk c tyT
 
@@ -121,25 +122,26 @@ let term_map on_var on_type c tm =
     | TmTuple tms -> TmTuple (List.map (walk c) tms)
     | TmProj (tm, i) -> TmProj (walk c tm, i)
     | TmTag (tag, tm1, tyT2) -> TmTag (tag, walk c tm1, on_type c tyT2)
-    | TmCase (tm1, cases) -> TmCase (walk c tm1, List.map (fun (tag, (x, tm)) -> (tag, (x, walk (c + 1) tm))) cases)
+    | TmCase (tm1, opt, cases) -> TmCase (walk c tm1, Option.map (on_type c) opt, List.map (fun (tag, (x, tm)) -> (tag, (x, walk (c + 1) tm))) cases)
     | TmFold tyT -> TmFold (on_type c tyT)
     | TmUnfold tyT -> TmUnfold (on_type c tyT)
     | TmTAbs (x, kd1, tm2) -> TmTAbs (x, kd1, walk (c + 1) tm2)
     | TmTApp (tm1, tyT2) -> TmTApp (walk c tm1, on_type c tyT2)
     | TmLet (x, tm1, tm2) -> TmLet (x, walk c tm1, walk (c + 1) tm2)
     | TmFix tm1 -> TmFix (walk c tm1)
-    | TmIf (tm1, tm2, tm3) -> TmIf (walk c tm1, walk c tm2, walk c tm3)
+    | TmIf (tm1, opt, tm2, tm3) -> TmIf (walk c tm1, Option.map (on_type c) opt, walk (c + 1) tm2, walk (c + 1) tm3)
     | TmAscribe (tm1, tyT2) -> TmAscribe (walk c tm1, on_type c tyT2)
     | TmPrimBinOp (bop, tm1, tm2) -> TmPrimBinOp (bop, walk c tm1, walk c tm2)
   in
   walk c tm
 
-let type_shift_above d c tyT =
+let rec type_shift_above d c tyT =
   type_map
     (fun c x n -> if x >= c then TyVar (x + d, n + d) else TyVar (x, n + d))
+    (term_shift_above d)
     c tyT
 
-let term_shift_above d c tm =
+and term_shift_above d c tm =
   term_map
     (fun c x n -> if x >= c then TmVar (x + d, n + d) else TmVar (x, n + d))
     (type_shift_above d)
@@ -157,31 +159,41 @@ let binding_shift d bind =
   | TyAbbBind (tyT, opt) -> TyAbbBind (type_shift d tyT, opt)
   | TmAbbBind (tm, opt) -> TmAbbBind (term_shift d tm, Option.map (type_shift d) opt)
 
-let term_subst j tm_s tm =
+let rec term_subst j tm_s tm =
   term_map
     (fun j x n -> if x = j then term_shift j tm_s else TmVar (x, n))
-    (fun j tyT -> tyT)
+    (fun j tyT -> term_type_subst j tm_s tyT)
     j tm
 
-let term_subst_top tm_s tm =
-  term_shift (-1) (term_subst 0 (term_shift 1 tm_s) tm)
-
-let type_subst j tyT_s tyT =
+and type_subst j tyT_s tyT =
   type_map
     (fun j x n -> if x = j then type_shift j tyT_s else TyVar (x, n))
+    (fun j tm -> type_term_subst j tyT_s tm)
     j tyT
 
-let type_subst_top tyT_s tyT =
-  type_shift (-1) (type_subst 0 (type_shift 1 tyT_s) tyT)
-
-let type_term_subst j tyT_s tm =
+and type_term_subst j tyT_s tm =
   term_map
     (fun j x n -> TmVar (x, n))
     (fun j tyT -> type_subst j tyT_s tyT)
     j tm
 
+and term_type_subst j tm_s tyT =
+  type_map
+    (fun j x n -> TyVar (x, n))
+    (fun j tm -> term_subst j tm_s tm)
+    j tyT
+
+let term_subst_top tm_s tm =
+  term_shift (-1) (term_subst 0 (term_shift 1 tm_s) tm)
+
+let type_subst_top tyT_s tyT =
+  type_shift (-1) (type_subst 0 (type_shift 1 tyT_s) tyT)
+
 let type_term_subst_top tyT_s tm =
   term_shift (-1) (type_term_subst 0 (type_shift 1 tyT_s) tm)
+
+let term_type_subst_top tm_s tyT =
+  type_shift (-1) (term_type_subst 0 (term_shift 1 tm_s) tyT)
 
 let get_binding ctx i =
   let (_, bind) = List.nth ctx i in
