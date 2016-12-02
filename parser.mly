@@ -96,14 +96,18 @@ option_kind:
   | COLONCOLON; k = kind { k }
   ;
 
+base_ty:
+  | TUNIT { BTyUnit }
+  | TBOOL { BTyBool }
+  | TINT { BTyInt }
+  | TFLOAT { BTyFloat }
+  ;
+
 atom_ty:
   | LPAREN; t = ty; RPAREN { t }
   | x = UCID
     { fun ctx -> TyVar (name_to_index ctx x, ctx_length ctx) }
-  | TUNIT { fun ctx -> TyBase BTyUnit }
-  | TBOOL { fun ctx -> TyBase BTyBool }
-  | TINT { fun ctx -> TyBase BTyInt }
-  | TFLOAT { fun ctx -> TyBase BTyFloat }
+  | bt = base_ty { fun ctx -> TyBase bt }
   | LT; ts = separated_list(COMMA, field_ty); GT { fun ctx -> TyVariant (List.map (fun t -> t ctx) ts) }
   | LCURLY; ts = separated_list(COMMA, ty); RCURLY { fun ctx -> TyProd (List.map (fun t -> t ctx) ts) }
   ;
