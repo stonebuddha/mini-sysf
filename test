@@ -12,7 +12,7 @@ let x = true in x;
 3.2 >=? 7.;
 7. <=? 3.2;
 unit <> unit;
-(lambda x: _:Bool -> Bool. if x false then true else false) (lambda x: Bool. if x then false else true);
+(lambda x: _:Bool -> Bool. if x false return Bool then true else false) (lambda x: Bool. if x return Bool then false else true);
 T = _:Int -> Int;
 lambda f: T. lambda x: Int. f (f x);
 (lambda X. lambda x: X. x) [All X. _:X -> X];
@@ -24,21 +24,21 @@ List = lambda T. Rec X. <nil : Unit, cons : {T, X}>;
 nil = lambda T. fold [List T] <nil = unit> as <nil : Unit, cons : {T, List T}>;
 cons = lambda T. lambda h: T. lambda t: List T. fold [List T] <cons = {h, t}> as <nil : Unit, cons : {T, List T}>;
 hd = lambda T. lambda t: List T. lambda d: T.
-       case unfold [List T] t of
+       case unfold [List T] t return T of
          <nil = _> => d
        | <cons = x> => x.1;
 tl = lambda T. lambda t: List T.
-       case unfold [List T] t of
+       case unfold [List T] t return List T of
          <nil = _> => nil [T]
        | <cons = x> => x.2;
 Opt = lambda T. <none : Unit, some : T>;
 hd_err = lambda T. lambda t: List T.
-           case unfold [List T] t of
+           case unfold [List T] t return Opt T of
              <nil = _> => <none = unit> as Opt T
            | <cons = x> => <some = x.1> as Opt T;
 Nat = Int;
 zero = 0 as Nat;
-abs = (lambda n: Int. if n <? 0 then (0 - n) else n) as n:Int -> Nat;
-fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. (if n == 0 then 1 else n * f (n - 1)) as Nat;
+abs = (lambda n: Int. if n <? 0 return Nat then (0 - n) else n) as n:Int -> Nat;
+fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. if n == 0 return Nat then 1 else n * f (n - 1);
 fac = fix fac_gen;
 fac 10;

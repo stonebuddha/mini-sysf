@@ -22,6 +22,9 @@ type prim_bin_op =
   | PBGt
   | PBGe
 
+type prim_un_op =
+  | PUNot
+
 type ty =
   | TyVar of int * int
   | TyBase of base_ty
@@ -56,6 +59,7 @@ and term =
   | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
   | TmPrimBinOp of prim_bin_op * term * term
+  | TmPrimUnOp of prim_un_op * term
 
 type binding =
   | NameBind

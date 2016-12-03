@@ -35,6 +35,7 @@ rule read =
   | "case"            { CASE }
   | "of"              { OF }
   | "Rec"             { REC }
+  | "return"          { RETURN }
   | ucid              { UCID (Lexing.lexeme lexbuf) }
   | lcid              { LCID (Lexing.lexeme lexbuf) }
   | ";"               { SEMI }

@@ -31,41 +31,6 @@ let rec simplify_type ctx tyT =
     simplify_type ctx tyT'
   with No_rule_applies -> tyT
 
-let rec type_eqv ctx tyT1 tyT2 =
-  let tyT1 = simplify_type ctx tyT1 in
-  let tyT2 = simplify_type ctx tyT2 in
-  match (tyT1, tyT2) with
-  | (TyVar (i, _), _) when is_ty_abb ctx i -> type_eqv ctx (get_ty_abb ctx i) tyT2
-  | (_, TyVar (i, _)) when is_ty_abb ctx i -> type_eqv ctx tyT1 (get_ty_abb ctx i)
-  | (TyVar (i, _), TyVar (j, _)) -> i = j
-  | (TyBase btyT1, TyBase btyT2) -> btyT1 = btyT2
-  | (TyArrow (x, tyT11, tyT12), TyArrow (_, tyT21, tyT22)) ->
-    let ctx' = add_name ctx x in
-    type_eqv ctx tyT11 tyT21 && type_eqv ctx' tyT12 tyT22
-  | (TyProd tyTs1, TyProd tyTs2) ->
-    List.length tyTs1 = List.length tyTs2 &&
-    List.for_all (fun (tyT1, tyT2) -> type_eqv ctx tyT1 tyT2) (List.combine tyTs1 tyTs2)
-  | (TyVariant ftys1, TyVariant ftys2) ->
-    List.length ftys1 = List.length ftys2 &&
-    List.for_all
-      (fun (tag2, tyT2) ->
-         try
-           let tyT1 = List.assoc tag2 ftys1 in
-           type_eqv ctx tyT1 tyT2
-         with Not_found -> false)
-      ftys2
-  | (TyRec (x, kd11, tyT12), TyRec (_, kd21, tyT22)) ->
-    let ctx' = add_name ctx x in
-    kd11 = kd21 && type_eqv ctx' tyT12 tyT22
-  | (TyAll (x, kd11, tyT12), TyAll (_, kd21, tyT22)) ->
-    let ctx' = add_name ctx x in
-    kd11 = kd21 && type_eqv ctx' tyT12 tyT22
-  | (TyAbs (x, kd11, tyT12), TyAbs (_, kd21, tyT22)) ->
-    let ctx' = add_name ctx x in
-    kd11 = kd21 && type_eqv ctx' tyT12 tyT22
-  | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_eqv ctx tyT11 tyT21 && type_eqv ctx tyT12 tyT22
-  | _ -> false
-
 let rec type_sub ctx tyT1 tyT2 =
   let tyT1 = simplify_type ctx tyT1 in
   let tyT2 = simplify_type ctx tyT2 in
@@ -73,12 +38,13 @@ let rec type_sub ctx tyT1 tyT2 =
   | (TyVar (i, _), _) when is_ty_abb ctx i -> type_sub ctx (get_ty_abb ctx i) tyT2
   | (_, TyVar (i, _)) when is_ty_abb ctx i -> type_sub ctx tyT1 (get_ty_abb ctx i)
   | (TyVar (i, _), TyVar (j, _)) -> i = j
-  | (TyBase btyT1, TyBase btyT2) -> btyT1 = btyT2
+  | (TyBase btyT1, _) -> type_sub ctx (TyRefined ("_v", btyT1, [TmTrue])) tyT2
+  | (_, TyBase btyT2) -> type_sub ctx tyT1 (TyRefined ("_v", btyT2, [TmTrue]))
   | (TyArrow (x, tyT11, tyT12), TyArrow (_, tyT21, tyT22)) ->
-    let ctx' = add_name ctx x in
+    let ctx' = add_binding ctx x (VarBind tyT21) in
     type_sub ctx tyT21 tyT11 && type_sub ctx' tyT12 tyT22
   | (TyProd tyTs1, TyProd tyTs2) ->
-    List.length tyTs1 >= List.length tyTs2 &&
+    List.length tyTs1 = List.length tyTs2 &&
     List.for_all (fun (tyT1, tyT2) -> type_sub ctx tyT1 tyT2) (List.combine tyTs1 tyTs2)
   | (TyVariant ftys1, TyVariant ftys2) ->
     List.length ftys1 = List.length ftys2 &&
@@ -89,8 +55,21 @@ let rec type_sub ctx tyT1 tyT2 =
            type_sub ctx tyT1 tyT2
          with Not_found -> false)
       ftys2
+  | (TyRec (x, kd11, tyT12), TyRec (_, kd21, tyT22)) ->
+    let ctx' = add_name ctx x in
+    kd11 = kd21 && type_sub ctx' tyT12 tyT22 (* iso-recursive-style subtype checking *)
+  | (TyAll (x, kd11, tyT12), TyAll (_, kd21, tyT22)) ->
+    let ctx' = add_name ctx x in
+    kd11 = kd21 && type_sub ctx' tyT12 tyT22
+  | (TyAbs (x, kd11, tyT12), TyAbs (_, kd21, tyT22)) ->
+    let ctx' = add_name ctx x in
+    kd11 = kd21 && type_sub ctx' tyT12 tyT22
   | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_sub ctx tyT11 tyT21 && type_sub ctx tyT12 tyT22
+  | (TyRefined (x, btyT1, tms1), TyRefined (_, btyT2, tms2)) when btyT1 = btyT2 -> true (* TODO: refinement checking! *)
   | _ -> false
+
+let type_eqv ctx tyT1 tyT2 =
+  type_sub ctx tyT1 tyT2 && type_sub ctx tyT2 tyT1
 
 let get_kind ctx i =
   match get_binding ctx i with
@@ -225,7 +204,7 @@ and type_of ctx tm =
   | TmIf (tm1, opt, tm2, tm3) ->
     if type_sub ctx (type_of ctx tm1) (TyBase BTyBool) then
       let ctx2 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [tm1]))) in
-      let ctx3 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [tm1]))) in (* FIXME: not *)
+      let ctx3 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [TmPrimUnOp (PUNot, tm1)]))) in
       let tyT2 = type_of ctx2 tm2 in
       let tyT3 = type_of ctx3 tm3 in
       match opt with
@@ -272,3 +251,10 @@ and type_of ctx tm =
          TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
        else
          failwith "failure with bop")
+  | TmPrimUnOp (uop, tm1) ->
+    let tyT1 = type_of ctx tm1 in
+    (match uop with
+     | PUNot ->
+       if type_sub ctx tyT1 (TyBase BTyBool) then
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+       else failwith "failure with uop")

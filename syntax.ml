@@ -22,6 +22,9 @@ type prim_bin_op =
   | PBGt
   | PBGe
 
+type prim_un_op =
+  | PUNot
+
 type ty =
   | TyVar of int * int
   | TyBase of base_ty
@@ -56,6 +59,7 @@ and term =
   | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
   | TmPrimBinOp of prim_bin_op * term * term
+  | TmPrimUnOp of prim_un_op * term
 
 type binding =
   | NameBind
@@ -132,6 +136,7 @@ let term_map on_var on_type c tm =
     | TmIf (tm1, opt, tm2, tm3) -> TmIf (walk c tm1, Option.map (on_type c) opt, walk (c + 1) tm2, walk (c + 1) tm3)
     | TmAscribe (tm1, tyT2) -> TmAscribe (walk c tm1, on_type c tyT2)
     | TmPrimBinOp (bop, tm1, tm2) -> TmPrimBinOp (bop, walk c tm1, walk c tm2)
+    | TmPrimUnOp (uop, tm1) -> TmPrimUnOp (uop, walk c tm1)
   in
   walk c tm
 
@@ -261,6 +266,9 @@ and string_of_type_atom_ty ctx tyT =
   | TyBase BTyFloat -> "Float"
   | TyVariant ftys -> "<" ^ String.join ", " (List.map (fun (tag, tyT) -> tag ^ ":" ^ string_of_type_ty ctx tyT) ftys)  ^ ">"
   | TyProd tyTs -> "{" ^ String.join ", " (List.map (string_of_type_ty ctx) tyTs) ^ "}"
+  | TyRefined (x, btyT, tms) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "{" ^ x ^ ":" ^ (string_of_type_atom_ty ctx (TyBase btyT)) ^ " | " ^ "constraints" ^ "}"
   | _ -> "(" ^ string_of_type_ty ctx tyT ^ ")"
 
 let string_of_type ctx tyT = string_of_type_ty ctx tyT
