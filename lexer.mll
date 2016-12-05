@@ -65,5 +65,6 @@ rule read =
   | "<?"              { LTQ }
   | ">=?"             { GEQ }
   | ">?"              { GTQ }
+  | "~"               { TILDE }
   | eof               { EOF }
   | _                 { failwith "illegal character" }

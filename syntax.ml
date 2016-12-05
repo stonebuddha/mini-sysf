@@ -354,6 +354,7 @@ and string_of_term_ascribe_term ctx tm =
 and string_of_term_atom_term ctx tm =
   match tm with
   | TmVar (i, _) -> index_to_name ctx i
+  | TmPrimUnOp (PUNot, tm1) -> "~" ^ string_of_term_atom_term ctx tm1
   | TmUnit -> "unit"
   | TmTrue -> "true"
   | TmFalse -> "false"

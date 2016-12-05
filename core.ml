@@ -65,7 +65,9 @@ let rec type_sub ctx tyT1 tyT2 =
     let ctx' = add_name ctx x in
     kd11 = kd21 && type_sub ctx' tyT12 tyT22
   | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_sub ctx tyT11 tyT21 && type_sub ctx tyT12 tyT22
-  | (TyRefined (x, btyT1, tms1), TyRefined (_, btyT2, tms2)) when btyT1 = btyT2 -> true (* TODO: refinement checking! *)
+  | (TyRefined (x, btyT1, tms1), TyRefined (_, btyT2, tms2)) when btyT1 = btyT2 ->
+    print_endline ("ADMITTED: " ^ string_of_type ctx tyT1 ^ " <: " ^ string_of_type ctx tyT2);
+    true (* TODO: refinement checking! *)
   | _ -> false
 
 let type_eqv ctx tyT1 tyT2 =
@@ -120,7 +122,12 @@ and check_kind_type ctx tyT =
 
 and type_of ctx tm =
   match tm with
-  | TmVar (i, _) -> get_type_from_context ctx i
+  | TmVar (i, _) ->
+    let tyT = get_type_from_context ctx i in
+    (match simplify_type ctx tyT with
+     | TyBase btyT -> TyRefined ("_v", btyT, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
+     | TyRefined (x, btyT, _) -> TyRefined ("_v", btyT, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
+     | _ -> tyT)
   | TmUnit -> TyRefined ("_v", BTyUnit, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmUnit)])
   | TmTrue -> TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmTrue)])
   | TmFalse -> TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), TmFalse)])
@@ -227,7 +234,7 @@ and type_of ctx tm =
      | PBIntMul
      | PBIntDiv ->
        if type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt) then
-         TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+         TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
        else failwith "failure with bop"
      | PBEq
      | PBNe ->
@@ -237,7 +244,7 @@ and type_of ctx tm =
          (type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt)) ||
          (type_sub ctx tyT1 (TyBase BTyFloat) && type_sub ctx tyT2 (TyBase BTyFloat))
        then
-         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
        else
          failwith "failure with bop"
      | PBLt
@@ -248,7 +255,7 @@ and type_of ctx tm =
          (type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt)) ||
          (type_sub ctx tyT1 (TyBase BTyFloat) && type_sub ctx tyT2 (TyBase BTyFloat))
        then
-         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
        else
          failwith "failure with bop")
   | TmPrimUnOp (uop, tm1) ->
@@ -256,5 +263,5 @@ and type_of ctx tm =
     (match uop with
      | PUNot ->
        if type_sub ctx tyT1 (TyBase BTyBool) then
-         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), tm)])
+         TyRefined ("_v", BTyBool, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
        else failwith "failure with uop")

@@ -58,6 +58,7 @@ open Syntax
 %token LTQ
 %token GEQ
 %token GTQ
+%token TILDE
 
 %start <Syntax.context -> (Syntax.command list * Syntax.context)> top_level
 
@@ -214,6 +215,7 @@ ascribe_term:
 
 atom_term:
   | LPAREN; e = term; RPAREN { e }
+  | TILDE; e = atom_term { fun ctx -> TmPrimUnOp (PUNot, e ctx) }
   | x = LCID { fun ctx -> TmVar (name_to_index ctx x, ctx_length ctx) }
   | UNIT { fun ctx -> TmUnit }
   | TRUE { fun ctx -> TmTrue }
