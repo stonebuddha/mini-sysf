@@ -231,6 +231,37 @@ let string_of_kind ctx kd = string_of_kind_kind ctx kd
 
 let string_of_option_kind ctx kd = if kd = KdType then "" else "::" ^ string_of_kind ctx kd
 
+let is_bool_bin_op bop =
+  match bop with
+  | PBEq
+  | PBNe
+  | PBLt
+  | PBLe
+  | PBGt
+  | PBGe -> true
+  | _ -> false
+
+let is_arith_bin_op bop =
+  match bop with
+  | PBIntAdd
+  | PBIntDiff
+  | PBIntMul
+  | PBIntDiv -> true
+  | _ -> false
+
+let string_of_bin_op bop =
+  match bop with
+  | PBIntAdd -> "+"
+  | PBIntDiff -> "-"
+  | PBIntMul -> "*"
+  | PBIntDiv -> "/"
+  | PBEq -> "=="
+  | PBNe -> "<>"
+  | PBLt -> "<"
+  | PBLe -> "<="
+  | PBGt -> ">"
+  | PBGe -> ">="
+
 let rec string_of_type_ty ctx tyT =
   match tyT with
   | TyAll (x, kd1, tyT2) ->
@@ -268,7 +299,70 @@ and string_of_type_atom_ty ctx tyT =
   | TyProd tyTs -> "{" ^ String.join ", " (List.map (string_of_type_ty ctx) tyTs) ^ "}"
   | TyRefined (x, btyT, tms) ->
     let (ctx', x) = pick_fresh_name ctx x in
-    "{" ^ x ^ ":" ^ (string_of_type_atom_ty ctx (TyBase btyT)) ^ " | " ^ "constraints" ^ "}"
+    "{" ^ x ^ ":" ^ (string_of_type_atom_ty ctx (TyBase btyT)) ^ " | " ^ String.join " /\ " (List.map (string_of_term ctx') tms) ^ "}"
   | _ -> "(" ^ string_of_type_ty ctx tyT ^ ")"
 
-let string_of_type ctx tyT = string_of_type_ty ctx tyT
+and string_of_term_term ctx tm =
+  match tm with
+  | TmAbs (x, tyT1, tm2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "lambda " ^ x ^ ":" ^ string_of_type ctx tyT1 ^ ". " ^ string_of_term_term ctx tm2
+  | TmTAbs (x, kd1, tm2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "lambda " ^ x ^ string_of_option_kind ctx kd1 ^ ". " ^ string_of_term_term ctx tm2
+  | TmCase (tm1, opt, cases) -> "case " ^ string_of_term_term ctx tm1 ^ " of " ^
+                                String.join " | " (List.map (fun (tag, (x, tm)) ->
+                                    let (ctx', x) = pick_fresh_name ctx x in
+                                    "<" ^ tag ^ "=" ^ x ^ "> => " ^ string_of_term_bool_term ctx' tm) cases)
+  | TmIf (tm1, opt, tm2, tm3) -> "if " ^ string_of_term_term ctx tm1 ^
+                            " then " ^ (let (ctx', x) = pick_fresh_name ctx "_" in string_of_term_term ctx' tm2) ^
+                                 " else " ^ string_of_term_term ctx tm3
+  | TmLet (x, tm1, tm2) ->
+    let (ctx', x) = pick_fresh_name ctx x in
+    "let " ^ x ^ " = " ^ string_of_term_term ctx tm1 ^ " in " ^ string_of_term_term ctx' tm2
+  | _ -> string_of_term_bool_term ctx tm
+
+and string_of_term_bool_term ctx tm =
+  match tm with
+  | TmPrimBinOp (bop, tm1, tm2) when is_bool_bin_op bop -> string_of_term_arith_term ctx tm1 ^ " " ^ string_of_bin_op bop ^ " " ^ string_of_term_arith_term ctx tm2
+  | _ -> string_of_term_arith_term ctx tm
+
+and string_of_term_arith_term ctx tm =
+  match tm with
+  | TmPrimBinOp (bop, tm1, tm2) when is_arith_bin_op bop -> string_of_term_arith_term ctx tm1 ^ " " ^ string_of_bin_op bop ^ " " ^ string_of_term_app_term ctx tm2
+  | _ -> string_of_term_app_term ctx tm
+
+and string_of_term_app_term ctx tm =
+  match tm with
+  | TmApp (tm1, tm2) -> string_of_term_app_term ctx tm1 ^ " " ^ string_of_term_path_term ctx tm2
+  | TmTApp (tm1, tyT2) -> string_of_term_app_term ctx tm1 ^ "[" ^ string_of_type ctx tyT2 ^ "]"
+  | TmFold tyT1 -> "fold[" ^ string_of_type ctx tyT1 ^ "]"
+  | TmUnfold tyT1 -> "unfold[" ^ string_of_type ctx tyT1 ^ "]"
+  | TmFix tm1 -> "fix " ^ string_of_term_path_term ctx tm1
+  | _ -> string_of_term_path_term ctx tm
+
+and string_of_term_path_term ctx tm =
+  match tm with
+  | TmProj (tm1, i) -> string_of_term_path_term ctx tm1 ^ "." ^ string_of_int i
+  | _ -> string_of_term_ascribe_term ctx tm
+
+and string_of_term_ascribe_term ctx tm =
+  match tm with
+  | TmAscribe (tm1, tyT2) -> string_of_term_atom_term ctx tm1 ^ " as " ^ string_of_type ctx tyT2
+  | _ -> string_of_term_atom_term ctx tm
+
+and string_of_term_atom_term ctx tm =
+  match tm with
+  | TmVar (i, _) -> index_to_name ctx i
+  | TmUnit -> "unit"
+  | TmTrue -> "true"
+  | TmFalse -> "false"
+  | TmInt i -> string_of_int i
+  | TmFloat f -> string_of_float f
+  | TmTuple tms -> "{" ^ String.join ", " (List.map (string_of_term_term ctx) tms) ^ "}"
+  | TmTag (tag, tm1, tyT2) -> "<" ^ tag ^ "=" ^ string_of_term_term ctx tm1 ^ ">" ^ " as " ^ string_of_type ctx tyT2
+  | _ -> "(" ^ string_of_term_term ctx tm ^ ")"
+
+and string_of_type ctx tyT = string_of_type_ty ctx tyT
+
+and string_of_term ctx tm = string_of_term_term ctx tm

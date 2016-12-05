@@ -41,7 +41,7 @@ let string_of_binding_type ctx bind =
   | NameBind -> ""
   | VarBind tyT -> ": " ^ string_of_type ctx tyT
   | TyVarBind kd -> ":: " ^ string_of_kind ctx kd
-  | TyAbbBind (tyT, opt) -> ":: " ^
+  | TyAbbBind (tyT, opt) -> "= " ^ string_of_type ctx tyT ^ " :: " ^
                             (match opt with
                              | Some kd -> string_of_kind ctx kd
                              | None -> string_of_kind ctx (kind_of ctx tyT))

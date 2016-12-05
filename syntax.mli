@@ -92,3 +92,4 @@ val term_type_subst_top : term -> ty -> ty
 
 val string_of_kind : context -> kind -> string
 val string_of_type : context -> ty -> string
+val string_of_term : context -> term -> string

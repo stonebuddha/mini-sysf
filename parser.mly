@@ -111,6 +111,8 @@ atom_ty:
   | bt = base_ty { fun ctx -> TyBase bt }
   | LT; ts = separated_list(COMMA, field_ty); GT { fun ctx -> TyVariant (List.map (fun t -> t ctx) ts) }
   | LCURLY; ts = separated_list(COMMA, ty); RCURLY { fun ctx -> TyProd (List.map (fun t -> t ctx) ts) }
+  | LCURLY; x = LCID; COLON; bt = base_ty; VBAR; tms = separated_list(COMMA, term); RCURLY
+    { fun ctx -> let ctx' = add_name ctx x in TyRefined (x, bt, List.map (fun tm -> tm ctx') tms) }
   ;
 
 field_ty:
@@ -156,7 +158,7 @@ option_return:
   | RETURN; t = ty { fun ctx -> Some (t ctx) }
   ;
 
-case: LT; tag = LCID; EQ; x = LCID; GT; DARROW; e = app_term { fun ctx -> let ctx' = add_name ctx x in (tag, (x, e ctx')) };
+case: LT; tag = LCID; EQ; x = LCID; GT; DARROW; e = bool_term { fun ctx -> let ctx' = add_name ctx x in (tag, (x, e ctx')) };
 
 app_term:
   | e = path_term { e }

@@ -36,7 +36,7 @@ hd_err = lambda T. lambda t: List T.
            case unfold [List T] t return Opt T of
              <nil = _> => <none = unit> as Opt T
            | <cons = x> => <some = x.1> as Opt T;
-Nat = Int;
+Nat = { _v : Int | _v >=? 0 };
 zero = 0 as Nat;
 abs = (lambda n: Int. if n <? 0 return Nat then (0 - n) else n) as n:Int -> Nat;
 fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. if n == 0 return Nat then 1 else n * f (n - 1);
