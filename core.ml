@@ -231,10 +231,14 @@ and type_of ctx tm =
     (match bop with
      | PBIntAdd
      | PBIntDiff
-     | PBIntMul
-     | PBIntDiv ->
+     | PBIntMul ->
        if type_sub ctx tyT1 (TyBase BTyInt) && type_sub ctx tyT2 (TyBase BTyInt) then
          TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
+       else failwith "failure with bop"
+     | PBIntDiv ->
+       if type_sub ctx tyT1 (TyBase BTyInt) &&
+          type_sub ctx tyT2 (TyRefined ("_v", BTyInt, [TmPrimBinOp (PBNe, TmVar (0, 1 + ctx_length ctx), TmInt 0)]))
+       then TyRefined ("_v", BTyInt, [TmPrimBinOp (PBEq, TmVar (0, 1 + ctx_length ctx), term_shift 1 tm)])
        else failwith "failure with bop"
      | PBEq
      | PBNe ->
