@@ -54,7 +54,7 @@ and term =
   | TmUnfold of ty
   | TmTAbs of string * kind * term
   | TmTApp of term * ty
-  | TmLet of string * term * term
+  | TmLet of string * term * ty option * term
   | TmFix of term
   | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
@@ -93,3 +93,5 @@ val term_type_subst_top : term -> ty -> ty
 val string_of_kind : context -> kind -> string
 val string_of_type : context -> ty -> string
 val string_of_term : context -> term -> string
+
+val can_type_escape_one_level : ty -> bool

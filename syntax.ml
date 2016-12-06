@@ -54,7 +54,7 @@ and term =
   | TmUnfold of ty
   | TmTAbs of string * kind * term
   | TmTApp of term * ty
-  | TmLet of string * term * term
+  | TmLet of string * term * ty option * term
   | TmFix of term
   | TmIf of term * ty option * term * term
   | TmAscribe of term * ty
@@ -131,7 +131,7 @@ let term_map on_var on_type c tm =
     | TmUnfold tyT -> TmUnfold (on_type c tyT)
     | TmTAbs (x, kd1, tm2) -> TmTAbs (x, kd1, walk (c + 1) tm2)
     | TmTApp (tm1, tyT2) -> TmTApp (walk c tm1, on_type c tyT2)
-    | TmLet (x, tm1, tm2) -> TmLet (x, walk c tm1, walk (c + 1) tm2)
+    | TmLet (x, tm1, opt, tm2) -> TmLet (x, walk c tm1, Option.map (on_type c) opt, walk (c + 1) tm2)
     | TmFix tm1 -> TmFix (walk c tm1)
     | TmIf (tm1, opt, tm2, tm3) -> TmIf (walk c tm1, Option.map (on_type c) opt, walk (c + 1) tm2, walk (c + 1) tm3)
     | TmAscribe (tm1, tyT2) -> TmAscribe (walk c tm1, on_type c tyT2)
@@ -317,7 +317,7 @@ and string_of_term_term ctx tm =
   | TmIf (tm1, opt, tm2, tm3) -> "if " ^ string_of_term_term ctx tm1 ^
                             " then " ^ (let (ctx', x) = pick_fresh_name ctx "_" in string_of_term_term ctx' tm2) ^
                                  " else " ^ string_of_term_term ctx tm3
-  | TmLet (x, tm1, tm2) ->
+  | TmLet (x, tm1, opt, tm2) ->
     let (ctx', x) = pick_fresh_name ctx x in
     "let " ^ x ^ " = " ^ string_of_term_term ctx tm1 ^ " in " ^ string_of_term_term ctx' tm2
   | _ -> string_of_term_bool_term ctx tm
@@ -367,3 +367,53 @@ and string_of_term_atom_term ctx tm =
 and string_of_type ctx tyT = string_of_type_ty ctx tyT
 
 and string_of_term ctx tm = string_of_term_term ctx tm
+
+let rec can_type_escape_one_level_above c tyT =
+  match tyT with
+  | TyVar (x, _) -> x <> c
+  | TyBase _ -> true
+  | TyArrow (_, tyT1, tyT2) -> can_type_escape_one_level_above c tyT1 && can_type_escape_one_level_above (c + 1) tyT2
+  | TyProd tyTs -> List.for_all (can_type_escape_one_level_above c) tyTs
+  | TyVariant ftys -> List.for_all (fun (_, tyT) -> can_type_escape_one_level_above c tyT) ftys
+  | TyRec (_, _, tyT2) -> can_type_escape_one_level_above (c + 1) tyT2
+  | TyAll (_, _, tyT2) -> can_type_escape_one_level_above (c + 1) tyT2
+  | TyAbs (_, _, tyT2) -> can_type_escape_one_level_above (c + 1) tyT2
+  | TyApp (tyT1, tyT2) -> can_type_escape_one_level_above c tyT1 && can_type_escape_one_level_above c tyT2
+  | TyRefined (_, _, tms) -> true
+
+and can_term_escape_one_level_above c tm =
+  match tm with
+  | TmVar (x, _) -> x <> c
+  | TmUnit -> true
+  | TmTrue -> true
+  | TmFalse -> true
+  | TmInt _ -> true
+  | TmFloat _ -> true
+  | TmAbs (_, tyT1, tm2) -> can_type_escape_one_level_above c tyT1 && can_term_escape_one_level_above (c + 1) tm2
+  | TmApp (tm1, tm2) -> can_term_escape_one_level_above c tm1 && can_term_escape_one_level_above c tm2
+  | TmTuple tms -> List.for_all (can_term_escape_one_level_above c) tms
+  | TmProj (tm1, _) -> can_term_escape_one_level_above c tm1
+  | TmTag (_, tm1, tyT2) -> can_term_escape_one_level_above c tm1 && can_type_escape_one_level_above c tyT2
+  | TmCase (tm1, opt, cases) ->
+    can_term_escape_one_level_above c tm1 &&
+    Option.map_default (can_type_escape_one_level_above c) true opt &&
+    List.for_all (fun (_, (_, tm)) -> can_term_escape_one_level_above (c + 1) tm) cases
+  | TmFold tyT1 -> can_type_escape_one_level_above c tyT1
+  | TmUnfold tyT1 -> can_type_escape_one_level_above c tyT1
+  | TmTAbs (_, _, tm2) -> can_term_escape_one_level_above (c + 1) tm2
+  | TmTApp (tm1, tyT2) -> can_term_escape_one_level_above c tm1 && can_type_escape_one_level_above c tyT2
+  | TmLet (_, tm1, opt, tm2) ->
+    can_term_escape_one_level_above c tm1 &&
+    Option.map_default (can_type_escape_one_level_above c) true opt &&
+    can_term_escape_one_level_above (c + 1) tm2
+  | TmFix tm1 -> can_term_escape_one_level_above c tm1
+  | TmIf (tm1, opt, tm2, tm3) ->
+    can_term_escape_one_level_above c tm1 &&
+    Option.map_default (can_type_escape_one_level_above c) true opt &&
+    can_term_escape_one_level_above (c + 1) tm2 &&
+    can_term_escape_one_level_above (c + 1) tm3
+  | TmAscribe (tm1, tyT2) -> can_term_escape_one_level_above c tm1 && can_type_escape_one_level_above c tyT2
+  | TmPrimBinOp (_, tm1, tm2) -> can_term_escape_one_level_above c tm1 && can_term_escape_one_level_above c tm2
+  | TmPrimUnOp (_, tm1) -> can_term_escape_one_level_above c tm1
+
+let can_type_escape_one_level tyT = can_type_escape_one_level_above 0 tyT

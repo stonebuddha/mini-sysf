@@ -144,8 +144,8 @@ term:
   | e = bool_term { e }
   | LAMBDA; x = LCID; COLON; t = ty; DOT; e = term
     { fun ctx -> let ctx' = add_name ctx x in TmAbs (x, t ctx, e ctx') }
-  | LET; x = LCID; EQ; e1 = term; IN; e2 = term
-    { fun ctx -> let ctx' = add_name ctx x in TmLet (x, e1 ctx, e2 ctx') }
+  | LET; x = LCID; EQ; e1 = term; r = option_return; IN; e2 = term
+    { fun ctx -> let ctx' = add_name ctx x in TmLet (x, e1 ctx, r ctx, e2 ctx') }
   | IF; e1 = term; r = option_return; THEN; e2 = term; ELSE; e3 = term
     { fun ctx -> TmIf (e1 ctx, r ctx, e2 (add_name ctx "_"), e3 (add_name ctx "_")) }
   | LAMBDA; x = UCID; k = option_kind; DOT; e = term

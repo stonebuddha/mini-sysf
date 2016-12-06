@@ -31,6 +31,45 @@ let rec simplify_type ctx tyT =
     simplify_type ctx tyT'
   with No_rule_applies -> tyT
 
+let rec encode_term ctx smt_ctx tm =
+  match tm with
+  | TmVar (i, _) ->
+    (match List.nth smt_ctx i with
+     | Some e -> e
+     | None ->
+       match get_binding ctx i with
+       | TmAbbBind (tm1, Some _) -> encode_term ctx smt_ctx tm1
+       | _ -> failwith "encode_term")
+  | _ -> smt_constant_true ()
+
+let encode_binding (x, bind) (ctx, smt_ctx) =
+  match bind with
+  | VarBind tyT ->
+    (match simplify_type ctx tyT with
+     | TyBase btyT ->
+       let dec =
+         match btyT with
+         | BTyUnit -> smt_declare_unit x
+         | BTyBool -> smt_declare_bool x
+         | BTyInt -> smt_declare_int x
+         | BTyFloat -> smt_declare_float x
+       in
+       (add_binding ctx x bind, Some dec :: smt_ctx)
+     | TyRefined (y, btyT, tms) ->
+       let dec =
+         match btyT with
+         | BTyUnit -> smt_declare_unit x
+         | BTyBool -> smt_declare_bool x
+         | BTyInt -> smt_declare_int x
+         | BTyFloat -> smt_declare_float x
+       in
+       let smt_ctx' = Some dec :: smt_ctx in
+       List.iter (fun tm -> smt_assert (encode_term (add_binding ctx y (VarBind (TyBase btyT))) smt_ctx' tm)) tms;
+       (add_binding ctx x bind, smt_ctx')
+     | TyArrow (_, tyT1, tyT2) -> failwith "FIXME"
+     | _ -> (add_binding ctx x bind, Some (smt_declare_uninterp x) :: smt_ctx))
+  | _ -> (add_binding ctx x bind, None :: smt_ctx)
+
 let rec type_sub ctx tyT1 tyT2 =
   let tyT1 = simplify_type ctx tyT1 in
   let tyT2 = simplify_type ctx tyT2 in
@@ -67,7 +106,9 @@ let rec type_sub ctx tyT1 tyT2 =
   | (TyApp (tyT11, tyT12), TyApp (tyT21, tyT22)) -> type_sub ctx tyT11 tyT21 && type_sub ctx tyT12 tyT22
   | (TyRefined (x, btyT1, tms1), TyRefined (_, btyT2, tms2)) when btyT1 = btyT2 ->
     print_endline ("ADMITTED: " ^ string_of_type ctx tyT1 ^ " <: " ^ string_of_type ctx tyT2);
-    true (* TODO: refinement checking! *)
+    smt_reset ();
+    smt_assert (smt_constant_false ());
+    smt_check ()
   | _ -> false
 
 let type_eqv ctx tyT1 tyT2 =
@@ -175,7 +216,7 @@ and type_of ctx tm =
              if List.for_all (fun (ctx', tyT') -> type_sub ctx' tyT' (type_shift 1 tyTret)) tyTrets then
                tyTret
              else failwith "failure with case expression"
-           | _ -> failwith "TODO"
+           | _ -> failwith "FIXME"
          with Not_found -> failwith "failure with case expression"
        else
          failwith "failure with case expression"
@@ -199,14 +240,21 @@ and type_of ctx tm =
      | TyAll (_, kd11, tyT12) ->
        if kd11 = kd2 then type_subst_top tyT2 tyT12 else failwith "failure when typing type application"
      | _ -> failwith "failure when typing type application")
-  | TmLet (x, tm1, tm2) ->
+  | TmLet (x, tm1, opt, tm2) ->
     let tyT1 = type_of ctx tm1 in
-    let tyT2 = type_of (add_binding ctx x (VarBind tyT1)) tm2 in
-    type_shift (-1) tyT2 (* FIXME: check no escape *)
+    let ctx' = add_binding ctx x (VarBind tyT1) in
+    let tyT2 = type_of ctx' tm2 in
+    (match opt with
+     | Some tyTret ->
+       if type_sub ctx' tyT2 (type_shift 1 tyTret) then
+         tyTret
+       else failwith "failure with let expression"
+     | _ -> failwith "FIXME")
   | TmFix tm1 ->
     let tyT1 = type_of ctx tm1 in
     (match simplify_type ctx tyT1 with
-     | TyArrow (_, tyT11, tyT12) when type_eqv ctx tyT11 (type_shift (-1) tyT12) -> type_shift (-1) tyT12 (* FIXME: check no escape *)
+     | TyArrow (_, tyT11, tyT12) when can_type_escape_one_level tyT12 && type_eqv ctx tyT11 (type_shift (-1) tyT12) ->
+       type_shift (-1) tyT12
      | _ -> failwith "failure when typing fix expression")
   | TmIf (tm1, opt, tm2, tm3) ->
     if type_sub ctx (type_of ctx tm1) (TyBase BTyBool) then
@@ -219,7 +267,7 @@ and type_of ctx tm =
         if type_sub ctx2 tyT2 (type_shift 1 tyTret) && type_sub ctx3 tyT3 (type_shift 1 tyTret) then
           tyTret
         else failwith "failure with if expression"
-      | _ -> failwith "TODO"
+      | _ -> failwith "FIXME"
     else
       failwith "failure with if expression"
   | TmAscribe (tm1, tyT2) ->

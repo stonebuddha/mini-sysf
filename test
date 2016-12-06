@@ -1,7 +1,7 @@
 unit;
 lambda x:Int. x;
 lambda X. lambda x:X. x;
-let x = true in x;
+let x = true return { _v : Bool | _v == true } in x;
 5 + 4;
 5 - 2;
 5 * 2;
