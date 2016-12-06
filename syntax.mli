@@ -95,3 +95,5 @@ val string_of_type : context -> ty -> string
 val string_of_term : context -> term -> string
 
 val can_type_escape_one_level : ty -> bool
+
+val ctx_fold_right : (string * binding -> 'b -> 'b) -> context -> 'b -> 'b

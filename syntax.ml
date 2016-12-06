@@ -417,3 +417,8 @@ and can_term_escape_one_level_above c tm =
   | TmPrimUnOp (_, tm1) -> can_term_escape_one_level_above c tm1
 
 let can_type_escape_one_level tyT = can_type_escape_one_level_above 0 tyT
+
+let rec ctx_fold_right f ctx b =
+  match ctx with
+  | [] -> b
+  | (x, bind) :: rest -> f (x, bind) (ctx_fold_right f rest b)

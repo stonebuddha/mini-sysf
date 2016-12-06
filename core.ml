@@ -31,15 +31,29 @@ let rec simplify_type ctx tyT =
     simplify_type ctx tyT'
   with No_rule_applies -> tyT
 
-let rec encode_term ctx smt_ctx tm =
+let rec encode_term smt_ctx tm =
   match tm with
-  | TmVar (i, _) ->
-    (match List.nth smt_ctx i with
-     | Some e -> e
-     | None ->
-       match get_binding ctx i with
-       | TmAbbBind (tm1, Some _) -> encode_term ctx smt_ctx tm1
-       | _ -> failwith "encode_term")
+  | TmVar (i, _) -> List.nth smt_ctx i
+  | TmPrimUnOp (PUNot, tm1) -> smt_make_not (encode_term smt_ctx tm1)
+  | TmPrimBinOp (bop, tm1, tm2) ->
+    let e1 = encode_term smt_ctx tm1 in
+    let e2 = encode_term smt_ctx tm2 in
+    (match bop with
+     | PBEq -> smt_make_eq e1 e2
+     | PBNe -> smt_make_ne e1 e2
+     | PBLt -> smt_make_lt e1 e2
+     | PBLe -> smt_make_le e1 e2
+     | PBGt -> smt_make_gt e1 e2
+     | PBGe -> smt_make_ge e1 e2
+     | PBIntAdd -> smt_make_int_add e1 e2
+     | PBIntDiff -> smt_make_int_diff e1 e2
+     | PBIntMul -> smt_make_int_mul e1 e2
+     | PBIntDiv -> smt_make_int_div e1 e2)
+  | TmUnit -> smt_constant_unit ()
+  | TmTrue -> smt_constant_true ()
+  | TmFalse -> smt_constant_false ()
+  | TmInt i -> smt_constant_int i
+  | TmFloat f -> smt_constant_float f
   | _ -> smt_constant_true ()
 
 let encode_binding (x, bind) (ctx, smt_ctx) =
@@ -54,7 +68,7 @@ let encode_binding (x, bind) (ctx, smt_ctx) =
          | BTyInt -> smt_declare_int x
          | BTyFloat -> smt_declare_float x
        in
-       (add_binding ctx x bind, Some dec :: smt_ctx)
+       (add_binding ctx x bind, dec :: smt_ctx)
      | TyRefined (y, btyT, tms) ->
        let dec =
          match btyT with
@@ -63,12 +77,12 @@ let encode_binding (x, bind) (ctx, smt_ctx) =
          | BTyInt -> smt_declare_int x
          | BTyFloat -> smt_declare_float x
        in
-       let smt_ctx' = Some dec :: smt_ctx in
-       List.iter (fun tm -> smt_assert (encode_term (add_binding ctx y (VarBind (TyBase btyT))) smt_ctx' tm)) tms;
+       let smt_ctx' = dec :: smt_ctx in
+       List.iter (fun tm -> smt_assert (encode_term smt_ctx' tm)) tms;
        (add_binding ctx x bind, smt_ctx')
-     | TyArrow (_, tyT1, tyT2) -> failwith "FIXME"
-     | _ -> (add_binding ctx x bind, Some (smt_declare_uninterp x) :: smt_ctx))
-  | _ -> (add_binding ctx x bind, None :: smt_ctx)
+     | _ -> (add_binding ctx x bind, smt_declare_uninterp x :: smt_ctx))
+  | TmAbbBind (tm1, _) -> (add_binding ctx x bind, encode_term smt_ctx tm1 :: smt_ctx)
+  | _ -> (add_binding ctx x bind, smt_declare_uninterp x :: smt_ctx)
 
 let rec type_sub ctx tyT1 tyT2 =
   let tyT1 = simplify_type ctx tyT1 in
@@ -107,7 +121,17 @@ let rec type_sub ctx tyT1 tyT2 =
   | (TyRefined (x, btyT1, tms1), TyRefined (_, btyT2, tms2)) when btyT1 = btyT2 ->
     print_endline ("ADMITTED: " ^ string_of_type ctx tyT1 ^ " <: " ^ string_of_type ctx tyT2);
     smt_reset ();
-    smt_assert (smt_constant_false ());
+    let encoded_ctx = snd (ctx_fold_right encode_binding ctx (empty_ctx, [])) in
+    let dec =
+      match btyT1 with
+      | BTyUnit -> smt_declare_unit x
+      | BTyBool -> smt_declare_bool x
+      | BTyInt -> smt_declare_int x
+      | BTyFloat -> smt_declare_float x
+    in
+    let encoded_ctx' = dec :: encoded_ctx in
+    List.iter (fun tm -> smt_assert (encode_term encoded_ctx' tm)) tms1;
+    smt_assert (smt_make_not (List.fold_right smt_make_conj (List.map (encode_term encoded_ctx') tms2) (smt_constant_true ())));
     smt_check ()
   | _ -> false
 
@@ -258,8 +282,8 @@ and type_of ctx tm =
      | _ -> failwith "failure when typing fix expression")
   | TmIf (tm1, opt, tm2, tm3) ->
     if type_sub ctx (type_of ctx tm1) (TyBase BTyBool) then
-      let ctx2 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [tm1]))) in
-      let ctx3 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [TmPrimUnOp (PUNot, tm1)]))) in
+      let ctx2 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [term_shift 1 tm1]))) in
+      let ctx3 = add_binding ctx "_" (VarBind (TyRefined ("_v", BTyUnit, [TmPrimUnOp (PUNot, term_shift 1 tm1)]))) in
       let tyT2 = type_of ctx2 tm2 in
       let tyT3 = type_of ctx3 tm3 in
       match opt with
