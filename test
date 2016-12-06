@@ -39,6 +39,6 @@ hd_err = lambda T. lambda t: List T.
 Nat = { _v : Int | _v >=? 0 };
 zero = 0 as Nat;
 abs = lambda n: Int. if n <? 0 return Nat then (0 - n) else n;
-fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. if n == 0 return Nat then 1 else n * f (n - 1);
+fac_gen = lambda f: n:Nat -> Nat. lambda n: Nat. if n == 0 return Nat then 1 else let t = f (n - 1) return Nat in n * t;
 fac = fix fac_gen;
 fac 10;
